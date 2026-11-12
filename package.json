@@ -8,6 +8,7 @@
     "typecheck": "npm --prefix functions run typecheck",
     "test": "node --test --test-timeout=300000 test/e2e.test.mjs",
     "emulators": "npm run build && functions/node_modules/.bin/firebase emulators:start --only functions,firestore --project demo-ai-relay",
+    "gen-secrets": "node scripts/gen-secrets.mjs",
     "deploy": "functions/node_modules/.bin/firebase deploy --only functions,firestore"
   }
 }

@@ -57,7 +57,11 @@ npx firebase-tools login
 
 ### 3. 秘密情報を登録する
 
-`secrets.example.json` を `secrets.json` にコピーし、値を入れます（トークンは `openssl rand -hex 32` で生成。使わない項目は消してよい）。`secrets.json` はgit管理外です。
+relay用のトークンを乱数で生成して `secrets.json` に書き出します（値は画面に出ません。既にある値は上書きしません）。WebhookのURLなど手で足す項目は `secrets.example.json` を参照。`secrets.json` はgit管理外です。
+
+```bash
+npm run gen-secrets
+```
 
 ```bash
 npx firebase-tools functions:secrets:set RELAY_SECRETS --data-file secrets.json

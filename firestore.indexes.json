@@ -1,0 +1,10 @@
+{
+  "indexes": [
+    { "collectionGroup": "events", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "next_attempt_ms", "order": "ASCENDING" } ] },
+    { "collectionGroup": "events", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "open", "order": "ASCENDING" }, { "fieldPath": "expires_ms", "order": "ASCENDING" } ] },
+    { "collectionGroup": "events", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "source", "order": "ASCENDING" }, { "fieldPath": "created_ms", "order": "DESCENDING" } ] },
+    { "collectionGroup": "events", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "target", "order": "ASCENDING" }, { "fieldPath": "created_ms", "order": "DESCENDING" } ] },
+    { "collectionGroup": "sheet_outbox", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "done", "order": "ASCENDING" }, { "fieldPath": "next_attempt_ms", "order": "ASCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

@@ -1,6 +1,6 @@
 # API仕様（v1.0）
 
-ベースURL: `https://ai-relay.<subdomain>.workers.dev`　／　本文はJSON、最大16KB　／　時刻はJST（`+09:00`）
+ベースURL: `https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay`　／　本文はJSON、最大16KB　／　時刻はJST（`+09:00`）
 
 ## 認証
 

@@ -1,18 +1,18 @@
-// End-to-end tests against the real Worker runtime (wrangler dev / workerd + local D1),
+// End-to-end tests against the Firebase emulators (Cloud Functions + Firestore),
 // with local mock servers standing in for each AI's receiving endpoint and for the sheet web app.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const PORT = 8799;
-const BASE = `http://127.0.0.1:${PORT}`;
+const PROJECT = "demo-ai-relay"; // demo-* projects never touch real Firebase resources
+const FN = `http://127.0.0.1:5001/${PROJECT}/asia-northeast1`;
+const BASE = `${FN}/relay`;
 const tok = Object.fromEntries(["Dots", "Grok", "Muse", "ChatGPT", "Claude", "ADMIN", "SHEET", "FIRE"].map((k) => [k, randomBytes(24).toString("hex")]));
 
 // ---- mock receivers -------------------------------------------------------
@@ -49,21 +49,22 @@ async function api(method, path, { as, body, headers = {}, token } = {}) {
   return { status: res.status, json: await res.json().catch(() => null) };
 }
 const post = (as, body, extra) => api("POST", "/events", { as, body, ...extra });
-const sweep = () => fetch(`${BASE}/__scheduled?cron=*+*+*+*+*`).then((r) => r.text());
+const sweep = () => fetch(`${FN}/testSweep`).then((r) => r.text());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, label, ms = 8000) {
   const end = Date.now() + ms;
   for (;;) {
     const v = await fn();
     if (v) return v;
-    if (Date.now() > end) assert.fail(`timed out waiting for: ${label}`);
+    if (Date.now() > end) assert.fail(`timed out waiting for: ${typeof label === "function" ? label() : label}`);
     await sleep(100);
   }
 }
 const statusOf = async (id) => (await api("GET", `/events/${id}`, { as: "ADMIN" })).json?.event?.status;
 
-let wrangler;
-let persist;
+let emulators;
+const root = join(here, "..");
+const localFiles = [join(root, "functions", ".env.local"), join(root, "functions", ".secret.local")];
 before(async () => {
   await listen(9101, (req, rsp, body) => {
     got.Dots.push({ ok: verifyRelaySignature("Dots", req, body), event: JSON.parse(body) });
@@ -90,34 +91,38 @@ before(async () => {
     rsp.writeHead(200).end(JSON.stringify({ ok: true, appended: b.rows.length }));
   });
 
+  const secrets = {
+    TOKEN_DOTS: tok.Dots, TOKEN_GROK: tok.Grok, TOKEN_MUSE: tok.Muse, TOKEN_CHATGPT: tok.ChatGPT, TOKEN_CLAUDE: tok.Claude,
+    ADMIN_TOKEN: tok.ADMIN,
+    URL_DOTS: "http://127.0.0.1:9101/hook", URL_GROK: "http://127.0.0.1:9102/hook", URL_CLAUDE: "http://127.0.0.1:9103/fire",
+    PUSH_AUTH_CLAUDE: tok.FIRE,
+    SHEET_WEBHOOK_URL: "http://127.0.0.1:9104/exec", SHEET_WEBHOOK_SECRET: tok.SHEET,
+  };
+  writeFileSync(localFiles[1], `RELAY_SECRETS='${JSON.stringify(secrets)}'\n`);
+  // Emulator-only overrides of functions/.env: fast retries, small limits, mixed delivery modes.
   writeFileSync(
-    join(here, ".dev.vars"),
+    localFiles[0],
     [
-      `TOKEN_DOTS=${tok.Dots}`, `TOKEN_GROK=${tok.Grok}`, `TOKEN_MUSE=${tok.Muse}`, `TOKEN_CHATGPT=${tok.ChatGPT}`, `TOKEN_CLAUDE=${tok.Claude}`,
-      `ADMIN_TOKEN=${tok.ADMIN}`,
-      `URL_DOTS=http://127.0.0.1:9101/hook`, `URL_GROK=http://127.0.0.1:9102/hook`, `URL_CLAUDE=http://127.0.0.1:9103/fire`,
-      `PUSH_AUTH_CLAUDE=${tok.FIRE}`,
-      `SHEET_WEBHOOK_URL=http://127.0.0.1:9104/exec`, `SHEET_WEBHOOK_SECRET=${tok.SHEET}`,
+      `AGENTS='{"Dots":{"mode":"push"},"Grok":{"mode":"push"},"Muse":{"mode":"pull"},"ChatGPT":{"mode":"sheet"},"Claude":{"mode":"push","format":"text","headers":{"anthropic-version":"2023-06-01"}}}'`,
+      "MAX_HOPS=3", "MAX_ATTEMPTS=3", "RETRY_BASE_SECONDS=1", "RETRY_CAP_SECONDS=4", "DEFAULT_TTL_SECONDS=3600", "DAILY_EVENT_LIMIT=40", "ALLOW_INSECURE_TARGETS=true",
     ].join("\n") + "\n",
   );
-  persist = mkdtempSync(join(tmpdir(), "ai-relay-test-"));
-  const wr = join(here, "..", "node_modules", ".bin", "wrangler");
-  const cfg = join(here, "wrangler.toml");
-  execFileSync(wr, ["d1", "migrations", "apply", "ai-relay-test", "--local", "-c", cfg, "--persist-to", persist], { stdio: "pipe", env: { ...process.env, CI: "1" } });
-  wrangler = spawn(wr, ["dev", "-c", cfg, "--port", String(PORT), "--ip", "127.0.0.1", "--test-scheduled", "--persist-to", persist, "--show-interactive-dev-session=false"], {
+  execFileSync("npm", ["run", "build"], { cwd: join(root, "functions"), stdio: "pipe" });
+  emulators = spawn(join(root, "functions", "node_modules", ".bin", "firebase"), ["emulators:start", "--only", "functions,firestore", "--project", PROJECT], {
+    cwd: root,
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, CI: "1" },
   });
   let out = "";
-  wrangler.stdout.on("data", (d) => (out += d));
-  wrangler.stderr.on("data", (d) => (out += d));
-  await until(() => fetch(`${BASE}/health`).then((r) => r.ok).catch(() => false), "wrangler dev to start\n" + out, 60000);
+  emulators.stdout.on("data", (d) => (out += d));
+  emulators.stderr.on("data", (d) => (out += d));
+  await until(() => fetch(`${BASE}/health`).then((r) => r.ok).catch(() => false), () => "emulators to start\n" + out.slice(-3000), 180000);
 });
 after(async () => {
-  wrangler?.kill("SIGTERM");
+  emulators?.kill("SIGINT");
+  await new Promise((r) => (emulators ? emulators.once("exit", r) : r()));
   for (const s of servers) s.close();
-  rmSync(join(here, ".dev.vars"), { force: true });
-  if (persist) rmSync(persist, { recursive: true, force: true });
+  for (const f of localFiles) rmSync(f, { force: true });
 });
 
 // ---- Phase 4 --------------------------------------------------------------

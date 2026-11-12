@@ -1,3 +1,4 @@
+import { useNonce } from "./store";
 import { ADMIN, Env, agents, hmacHex, safeEqual, secret } from "./util";
 
 export interface AuthOk {
@@ -53,9 +54,6 @@ export async function authenticate(req: Request, env: Env, rawBody: string): Pro
   if (!(await safeEqual(expected, sig.toLowerCase()))) {
     return { ok: false, status: 401, code: "bad_signature", message: "Signature mismatch" };
   }
-  const ins = await env.DB.prepare("INSERT OR IGNORE INTO nonces (nonce, seen_ms) VALUES (?, ?)")
-    .bind(`${who}:${nonce}`, Date.now())
-    .run();
-  if (!ins.meta.changes) return { ok: false, status: 401, code: "replay", message: "Nonce already used" };
+  if (!(await useNonce(`${who}_${nonce}`, Date.now()))) return { ok: false, status: 401, code: "replay", message: "Nonce already used" };
   return { ok: true, agent: who, isAdmin: who === ADMIN };
 }

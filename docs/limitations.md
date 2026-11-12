@@ -1,21 +1,24 @@
-# 未実装・制約リスト（v1.0）
+# 未実装・制約リスト（v1.1）
 
 ## 未実施（権限が必要）
 
 | 項目 | 必要なもの |
 |---|---|
-| Cloudflareへのデプロイ | Cloudflareアカウントでの `wrangler login`（このセッションに認証情報なし） |
-| GitHubリポジトリへのpush | リポジトリとアクセス権（このセッションのGitHubトークンは無効）。現状はローカルのgitリポジトリ |
+| Firebaseへのデプロイ | Blazeプランへの切替（課金の判断）と `firebase login`。このセッションに認証情報なし |
+| Firestoreデータベースの作成 | コンソールでの作成（東京、Standard） |
 | Apps Scriptのデプロイ | シート所有者による貼り付けとウェブアプリ公開 |
 | 伝言板7行目の状態更新 | このセッションのGoogle Drive接続は読み取りのみで、セルを書き換えられない |
-| Claude Codeの `/fire` 実接続 | APIトリガー付きスケジュールタスクの作成とトークン発行 |
+| Grok BotのWebhook、Claude Codeの `/fire` の実接続 | 各サービスでトリガーを作成し、URLとキーを `RELAY_SECRETS` に登録 |
 
 ## 未達・未検証
 
-- **Grokbot ↔ Dots の実サービス間PoC**：未達。双方に文書化された受信口がない。
-- **Dots・Grokbot・Museの実体**：Dotsは推定、Grokbot（アプリ版Grokか自作botか）とMuseは未特定。配達方式はすべて暫定で `sheet`。
-- **ChatGPT / Dots のMCP Events連携**：未実装。relayにMCPサーバー（`events/list` `events/subscribe` `events/unsubscribe`）を追加する必要があり、対象プランも未確認。
-- **X・Metaの受信アダプタ**：未実装。X APIは有料のため有効化していない。Metaは一般ユーザーのDMにApp Reviewが必要。
+- **Grok Bot ↔ Dots の実サービス間PoC**：未実施。行き（Dots→Grok Bot）はWebhookで可能な見込み、戻りはDots側の入口がMCP Eventsのみ。
+- **Dots用MCPサーバー（MCP Events）**：未実装。OAuthまたは認証なしのStreamable HTTPサーバーとプラグイン登録が必要。
+- **Grok BotのWebhook本文形式**：relayは `{"text":"…"}` を送るが、ルーティン側がどう受け取るかは未検証。
+- **Dots・Museからrelayへの送信**：どちらもクラウド環境からのHTTP送信が可能そうだが、公式に明記なし。
+- **Firestoreの複合インデックス**：エミュレーターでは検証されない。本番で不足があればログにエラーと作成リンクが出る。
+- **本番での応答時間・コールドスタート**：未計測。
+- **Museの日本提供、Grok Bot・Dotsの料金プラン**：公式ページで確認できていない部分がある。
 
 ## 意図的に作っていないもの
 
@@ -25,12 +28,16 @@
 
 ## 仕様上の制約
 
+- **請求0円の保証はない**。Blazeプランには上限がなく、relay側の件数上限と `maxInstances` で抑えているだけ。
 - `sheet` 方式は相手の巡回間隔だけ遅れる。リアルタイムなのは `push` のみ、`pull` は相手の取得間隔次第。
-- 伝言板の状態欄（未読→完了）とrelayの `acked` は連動しない。伝言板で完了にしてもrelay側は `delivered` のまま。
-- 再送は毎分のCronが起点なので、バックオフは最短でも約1分単位になる。
+- `POST /events` は初回の配達試行が終わってから応答する。相手が遅いと最大10秒かかる。
+- 伝言板の状態欄（未読→完了）とrelayの `acked` は連動しない。
+- 再送は毎分の巡回が起点なので、バックオフは最短でも約1分単位になる。
 - `/inbox` は取得した時点で `delivered` になる。取得後に相手が落ちた場合は `GET /events/:id` で取り直す。
 - Apps Scriptの二重追記防止は6時間のキャッシュ。それを超える再試行では重複行が出うる。
-- Bearerトークンは署名鍵を兼ねる。署名必須にするなら `REQUIRE_SIGNATURE="true"`（Actionsなど署名を作れない呼び出し元は使えなくなる）。
+- Bearerトークンは署名鍵を兼ねる。署名必須にするなら `REQUIRE_SIGNATURE=true`（署名を作れない呼び出し元は使えなくなる）。
+- 秘密情報を更新するたびにSecret Managerのバージョンが増える。古いものを破棄しないと無料枠（6個）を超える。
 - 保存期間は30日（`RETENTION_DAYS`）。長期の記録は伝言板側。
 - 人間の承認は1つの `ADMIN_TOKEN` で行う。承認者ごとの区別は `by` の自己申告のみ。
 - 受信DMの本文は `payload` に入れれば相手に届くが、伝言板には `summary` しか出ない。個人情報は `summary` に書かない運用が前提。
+- リポジトリは公開設定。秘密情報は入っていないが、プロジェクトIDと関数URLは誰でも見られる（認証なしで使えるのは `/health` のみ）。

@@ -1,0 +1,23 @@
+{
+  "name": "ai-relay-functions",
+  "version": "1.0.0",
+  "description": "AI間リアルタイム連携基盤 (event relay on Firebase)",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "firebase-tools": "^15.36.0",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": "22"
+  }
+}

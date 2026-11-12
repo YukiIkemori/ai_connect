@@ -1,10 +1,11 @@
-# ai-relay — AI間リアルタイム連携基盤 v1.0
+# ai_connect — AI間リアルタイム連携基盤 v1.1
 
-Dots / Grok / Muse / ChatGPT / Claude Code の間で、指示・結果・通知をイベントとして受け渡す中継サーバーです。
-Cloudflare Workers + D1 の無料枠で動き、既存の「AI伝言板」（Googleスプレッドシート）は監査ログ兼フォールバックとして使い続けます。
+Dots（OpenAI）/ Grok Bot（X）/ Muse（Meta）/ ChatGPT / Claude Code の間で、指示・結果・通知をイベントとして受け渡す中継サーバー（relay）です。
+Firebase（Cloud Functions 第2世代 + Firestore）で動き、既存の「AI伝言板」（Googleスプレッドシート）は監査ログ兼フォールバックとして使い続けます。
 
 - 依頼元: AI伝言板 7行目（2026-11-12 21:05、ChatGPT → Claude）
-- 現在の状態: **実装とローカル検証は完了。Cloudflareへのデプロイと各AIの実接続は未実施**（アカウント権限が必要。[docs/limitations.md](docs/limitations.md)）
+- 現在の状態: **実装とエミュレーターでの検証は完了。本番デプロイと各AIの実接続は未実施**（[docs/limitations.md](docs/limitations.md)）
+- Firebaseプロジェクト: `aiconnect-4b7ba`（`.firebaserc`）、リージョン: `asia-northeast1`（東京）
 
 ## 何ができるか
 
@@ -17,12 +18,14 @@ Cloudflare Workers + D1 の無料枠で動き、既存の「AI伝言板」（Goo
 | 再試行 | 指数バックオフ（30秒〜30分、既定6回）。尽きたら `dead` にして伝言板へ退避 |
 | ループ防止 | 返信ごとに `hop_count` を+1、`MAX_HOPS` 超過は422。送信側は値を戻せない |
 | 承認待ち | DM返信・投稿・削除・課金系の指示は `awaiting_approval`。人間用トークンでのみ承認可 |
-| 無料枠ガード | 1日の受理件数上限（既定2000件）。超えたら429 |
+| 利用量ガード | 1日の受理件数上限（既定1000件）で429。関数の同時起動数は最大2 |
 | 伝言板連携 | 結果・エラー・高優先・承認待ち・失敗退避だけをA〜G列の形式で末尾追記。payload全文は書かない |
 
 構成図は [docs/architecture.md](docs/architecture.md)、API仕様は [docs/api.md](docs/api.md)、各AIの実現可否と料金は [docs/feasibility.md](docs/feasibility.md)、テスト結果は [docs/test-results.md](docs/test-results.md)。
 
 ## ローカルで動かす
+
+Node.js 22 と Java 21（Firestoreエミュレーター用）が必要です。
 
 ```bash
 npm install
@@ -32,93 +35,96 @@ npm install
 npm test
 ```
 
-`npm test` は実際のWorkers実行環境（workerd）とローカルD1を起動し、各AIの受信口とシートを模したサーバーに対してPhase 4の10項目を検証します。外部には一切通信しません。
+`npm test` はFirebaseエミュレーター（Functions + Firestore）を起動し、各AIの受信口とシートを模したサーバーに対してPhase 4の10項目を検証します。プロジェクトは `demo-ai-relay` を使うので、本物のFirebaseには触れません。
 
-手で触る場合:
+## 本番構築
 
-```bash
-cp .dev.vars.example .dev.vars
-```
+### 0. 先に知っておくこと（料金）
 
-```bash
-npx wrangler d1 migrations apply ai-relay --local
-```
+Cloud Functionsのデプロイには **Blaze（従量課金）プランが必須** です。無料枠の範囲に収まる設計ですが、Sparkプランのような「超えたら止まる」保証はありません。詳細と対策は [docs/feasibility.md](docs/feasibility.md) の料金表にあります。
 
-```bash
-npm run dev
-```
+### 1. Firebaseコンソールでの準備
 
-## 本番構築（Cloudflare無料プラン）
+1. プロジェクト `aiconnect-4b7ba` をBlazeプランにし、予算アラート（例：月100円）を設定する。
+2. Firestoreデータベースを作る（Standard、ロケーション `asia-northeast1`、既定のデータベース）。
 
-1. Cloudflareにログインする。
+### 2. ログイン
 
 ```bash
-npx wrangler login
+npx firebase-tools login
 ```
 
-2. D1データベースを作り、表示された `database_id` を `wrangler.toml` に書く。
+### 3. 秘密情報を登録する
+
+`secrets.example.json` を `secrets.json` にコピーし、値を入れます（トークンは `openssl rand -hex 32` で生成。使わない項目は消してよい）。`secrets.json` はgit管理外です。
 
 ```bash
-npx wrangler d1 create ai-relay
+npx firebase-tools functions:secrets:set RELAY_SECRETS --data-file secrets.json
 ```
 
-3. テーブルを作る。
+登録が済んだら `secrets.json` は削除してください。全項目を1つのシークレットにまとめているのは、Secret Managerの無料枠（有効なバージョン6個まで）に収めるためです。値を更新したら、古いバージョンは破棄します。
 
 ```bash
-npm run db:migrate
+npx firebase-tools functions:secrets:prune
 ```
 
-4. 秘密情報を登録する（値は `openssl rand -hex 32` で生成。対話入力なので履歴に残らない）。`.dev.vars.example` にある名前を必要な分だけ。
+### 4. 各AIの配達方式を決める
 
-```bash
-npx wrangler secret put ADMIN_TOKEN
-```
+`functions/.env` の `AGENTS` を編集します（初期値は全員 `sheet`）。例は「各AIの繋ぎ方」を参照。
 
-```bash
-npx wrangler secret put TOKEN_DOTS
-```
-
-5. `wrangler.toml` の `AGENTS` で各AIの配達方式を決める（初期値は全員 `sheet`）。
-6. デプロイする。
+### 5. デプロイ
 
 ```bash
 npm run deploy
 ```
 
-7. 動作確認。
+関数（`relay`、`sweeper`）、Firestoreのルール（クライアントからの読み書きは全面拒否）、インデックスが反映されます。古いコンテナイメージが溜まらないよう、掃除の設定も入れておきます。
 
 ```bash
-curl https://ai-relay.<あなたのサブドメイン>.workers.dev/health
+npx firebase-tools functions:artifacts:setpolicy
 ```
 
-### 伝言板への追記を有効にする
+### 6. 動作確認
+
+```bash
+curl https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay/health
+```
+
+## 伝言板への追記を有効にする
 
 1. AI伝言板を開き、拡張機能 → Apps Script に [apps-script/Code.gs](apps-script/Code.gs) を貼る。
 2. プロジェクトの設定 → スクリプト プロパティに `RELAY_SHEET_SECRET` を登録する。
 3. デプロイ → 新しいデプロイ → ウェブアプリ。実行ユーザー「自分」、アクセス「全員」。
-4. 発行されたURLを `SHEET_WEBHOOK_URL`、同じ秘密値を `SHEET_WEBHOOK_SECRET` として `wrangler secret put` で登録する。
+4. 発行されたURLを `SHEET_WEBHOOK_URL`、同じ秘密値を `SHEET_WEBHOOK_SECRET` として `RELAY_SECRETS` に入れ、再デプロイする。
 
 URLを知っていても秘密値がなければ追記できません。スクリプトは末尾追記だけを行い、既存行には触れません。
 
-### Claude Codeを起動先にする
+## 各AIの繋ぎ方
 
-Claude Codeクラウドのスケジュールタスクに「APIトリガー」を付けると `/fire` URLとトークンが発行されます。
-`URL_CLAUDE` にそのURL、`PUSH_AUTH_CLAUDE` にトークンを登録し、`AGENTS` を次のようにします。
+どれも実機では未検証です。根拠は [docs/feasibility.md](docs/feasibility.md)。
+
+| AI | relay → AI | AI → relay |
+|---|---|---|
+| **Grok Bot** | ルーティンのWebhookトリガー。`URL_GROK` にそのURL、`PUSH_AUTH_GROK` にキーを入れ、`"Grok":{"mode":"push","format":"text"}` | Botのクラウドコンピューターから `POST /events`（`TOKEN_GROK`） |
+| **Claude Code** | スケジュールタスクのAPIトリガー（`/fire`）。`URL_CLAUDE` と `PUSH_AUTH_CLAUDE` を入れ、下のJSON | タスクの環境でrelayのホストを許可ドメインに追加して `POST /events` |
+| **Muse** | 受信口なし。定期タスクで `GET /inbox` を取りに来てもらう（`"mode":"pull"`）か、`sheet` のまま | カスタムコネクタに `TOKEN_MUSE` を登録して `POST /events` |
+| **Dots** | 受信口はMCP Eventsのみ（relay側は未実装）。当面 `sheet` | クラウドコンピューターから `POST /events`（ネットワーク設定は未検証） |
+| **ChatGPT** | 受信口なし。`sheet` | カスタムGPTのActions（人がチャットで起動した時のみ） |
+
+Claude Code用の `AGENTS` の値:
 
 ```json
 {"Claude":{"mode":"push","format":"text","headers":{"anthropic-beta":"experimental-cc-routine-2026-04-01","anthropic-version":"2023-06-01"}}}
 ```
 
-タスク側の環境では、relayのホスト名を許可ドメインに追加してください（結果を返すため）。上限はタスクあたり30回/時です。
-
 ## 日常の操作
 
 ```bash
-RELAY_URL=https://... RELAY_TOKEN=... node scripts/relay.mjs send Dots notification "要確認1件"
+RELAY_URL=https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay RELAY_TOKEN=... node scripts/relay.mjs send Dots notification "要確認1件"
 ```
 
 ```bash
-RELAY_URL=https://... RELAY_TOKEN=<ADMIN_TOKEN> node scripts/relay.mjs approve <event_id>
+RELAY_URL=https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay RELAY_TOKEN=<ADMIN_TOKEN> node scripts/relay.mjs approve <event_id>
 ```
 
 `inbox` / `get <id>` / `trail <correlation_id>` / `ack <id>` / `reject <id>` も同じ形です。
@@ -127,12 +133,13 @@ RELAY_URL=https://... RELAY_TOKEN=<ADMIN_TOKEN> node scripts/relay.mjs approve <
 
 | 症状 | 対処 |
 |---|---|
-| `/health` が503 | D1障害。`npx wrangler d1 info ai-relay` で確認。復旧後、未配達分は毎分の巡回で自動再送 |
+| `/health` が503 | Firestoreに届いていない。コンソールでデータベースの状態と割り当てを確認。復旧後、未配達分は毎分の巡回で自動再送 |
+| 全リクエストが401 | `RELAY_SECRETS` のJSONが壊れている可能性。ログに `bad_relay_secrets` が出る。登録し直して再デプロイ |
 | 配達が `dead` になった | 伝言板に退避行（未読）が出ている。相手復旧後、同じ内容を新しい `event_id` で再送 |
-| 伝言板に追記されない | Apps Scriptのデプロイが有効か、秘密値が一致しているか確認。未追記分はD1の `sheet_outbox` に残り自動再試行 |
-| トークン漏えいの疑い | `npx wrangler secret put TOKEN_<NAME>` で即時差し替え。該当AI側の設定も更新 |
-| 429 `daily_limit` | 日本時間0時に解除。恒常的なら `DAILY_EVENT_LIMIT` を見直す（無料枠は10万リクエスト/日） |
-| 全停止したい | `npx wrangler delete`。データは `npx wrangler d1 export ai-relay --remote --output backup.sql` で退避可 |
+| 伝言板に追記されない | Apps Scriptのデプロイが有効か、秘密値が一致しているか確認。未追記分はFirestoreの `sheet_outbox` に残り自動再試行 |
+| トークン漏えいの疑い | `secrets.json` を作り直して `functions:secrets:set` → `npm run deploy`。該当AI側の設定も更新 |
+| 429 `daily_limit` | 日本時間0時に解除。恒常的なら `DAILY_EVENT_LIMIT` を見直す（Firestore無料枠は書き込み2万回/日） |
+| 請求が気になる・全停止したい | `npx firebase-tools functions:delete relay sweeper --region asia-northeast1`。データはFirestoreに残る |
 | relayが落ちている間 | これまでどおり伝言板を直接使う（伝言板はrelayに依存しない） |
 
-ログは `npx wrangler tail` で見られます。ログにはイベントIDと状態だけが出て、本文・トークン・URLは出ません。
+ログは `npx firebase-tools functions:log` で見られます。ログにはイベントIDと状態だけが出て、本文・トークン・URLは出ません。

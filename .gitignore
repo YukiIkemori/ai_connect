@@ -1,5 +1,9 @@
 node_modules/
-.wrangler/
-.dev.vars
-.env
+functions/lib/
+.env.local
+*.local
+.secret.local
+functions/.env.demo-*
 *.log
+.firebase/
+secrets.json

@@ -1,6 +1,5 @@
 export interface Env {
-  DB: D1Database;
-  AGENTS: string;
+  AGENTS?: string;
   MAX_HOPS?: string;
   MAX_ATTEMPTS?: string;
   RETRY_BASE_SECONDS?: string;
@@ -15,7 +14,7 @@ export interface Env {
   SHEET_WEBHOOK_URL?: string;
   SHEET_WEBHOOK_SECRET?: string;
   // TOKEN_<AGENT>, URL_<AGENT>, PUSH_AUTH_<AGENT> are read dynamically.
-  [key: string]: unknown;
+  [key: string]: string | undefined;
 }
 
 export type AgentMode = "push" | "pull" | "sheet";
@@ -29,6 +28,7 @@ export interface AgentConfig {
 export const EVENT_TYPES = ["instruction", "result", "notification", "error", "ack"] as const;
 export const PRIORITIES = ["low", "normal", "high"] as const;
 export const ADMIN = "Human"; // the approving human; never a valid event target
+export const NEVER = Number.MAX_SAFE_INTEGER; // next_attempt_ms for events the relay does not push
 
 export function num(v: unknown, fallback: number): number {
   const n = Number(v);
@@ -65,8 +65,7 @@ export function jstDay(ms: number): string {
 const enc = new TextEncoder();
 
 export async function sha256Hex(s: string): Promise<string> {
-  const d = await crypto.subtle.digest("SHA-256", enc.encode(s));
-  return hex(d);
+  return hex(await crypto.subtle.digest("SHA-256", enc.encode(s)));
 }
 
 export async function hmacHex(key: string, msg: string): Promise<string> {
@@ -86,10 +85,10 @@ export async function safeEqual(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
-export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 }
 

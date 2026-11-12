@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Minimal relay client (signed requests). Secrets come from the environment only.
-//   RELAY_URL=https://ai-relay.<you>.workers.dev RELAY_TOKEN=... node scripts/relay.mjs send Dots notification "要確認1件"
+//   RELAY_URL=https://asia-northeast1-<project>.cloudfunctions.net/relay RELAY_TOKEN=... node scripts/relay.mjs send Dots notification "要確認1件"
 //   ... relay.mjs inbox | get <id> | ack <id> [note] | approve <id> | reject <id> | trail <correlation_id>
 import { createHmac, randomBytes } from "node:crypto";
 

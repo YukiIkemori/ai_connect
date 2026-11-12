@@ -1,26 +1,13 @@
 {
-  "name": "ai-relay",
-  "version": "1.0.0",
-  "description": "AI間リアルタイム連携基盤 (event relay on Cloudflare Workers)",
-  "directories": {
-    "doc": "docs",
-    "test": "test"
-  },
-  "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc",
-    "test": "node --test test/e2e.test.mjs",
-    "db:migrate": "wrangler d1 migrations apply ai-relay --remote"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261112.1",
-    "typescript": "^7.0.2",
-    "wrangler": "^4.160.1"
-  },
+  "name": "ai-connect",
   "private": true,
-  "type": "module"
+  "description": "AI間リアルタイム連携基盤 (event relay on Firebase)",
+  "scripts": {
+    "postinstall": "npm --prefix functions install",
+    "build": "npm --prefix functions run build",
+    "typecheck": "npm --prefix functions run typecheck",
+    "test": "node --test --test-timeout=300000 test/e2e.test.mjs",
+    "emulators": "npm run build && functions/node_modules/.bin/firebase emulators:start --only functions,firestore --project demo-ai-relay",
+    "deploy": "functions/node_modules/.bin/firebase deploy --only functions,firestore"
+  }
 }

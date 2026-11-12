@@ -1,40 +1,53 @@
 # Phase 0：各AIの実現可否と料金（2026-11-12 調査）
 
-判定は **可 / 不可 / 未検証**。根拠は各社の公式ページです（要約ツール経由で読んだため、金額は契約前に原文で再確認してください）。
+判定は **可 / 不可 / 未検証**。根拠は各社の公式ページです（要約ツール経由で読んだため、金額や文言は契約・設定の前に原文で再確認してください）。
 **実機テストはどのサービスに対しても行っていません。** このセッションには各サービスのアカウント権限がないためです。
 
 ## AIごとの判定
 
-| AI | 外部から起動（受信） | 外部へHTTP送信 | 伝言板の読み書き | v1.0での配達方式 | 追加費用 |
+| AI | 外部から起動（受信） | 外部へHTTP送信 | 伝言板の読み書き | v1.1での配達方式 | 利用条件 |
 |---|---|---|---|---|---|
-| **Claude Code**（クラウド） | **可**：スケジュールタスクのAPIトリガー `/fire`（Bearer、`text` 本文）。タスクあたり30回/時、アカウント100回/時 | **可**：環境の許可ドメインにrelayを追加 | 可（Driveコネクタは読み取りのみ確認。セル書き込みは本セッションでは不可） | `push`（text形式）。**実装済み・模擬先でのみ検証** | なし（サブスクの利用枠を消費） |
-| **ChatGPT**（通常チャット） | **不可**：汎用Webhookなし。スケジュールタスクは最短1時間、イベント起動はGmail/Slack/GitHubのみ（未検証：ヘルプ記事が取得不可） | 条件付き可：カスタムGPTのActionsでBearer付きAPI呼び出し（チャット中に人が起動した時のみ） | 実績あり（伝言板5行目） | `sheet` | なし |
-| **Dots** | **未検証**：OpenAIの「dots」と推定（確証なし）。汎用Webhookは文書になし。Slack/Teams、自己スケジュール、MCP Eventsが入口 | 未検証 | 未検証 | `sheet` | 未検証（Pro以上が対象との第三者情報） |
-| **Grok**（アプリ） | **不可**：Webhook起動なし。Automationsはスケジュールのみ、メール起動はSuperGrok | 不可（自作MCPサーバー経由のみ） | 可：Google Workspaceコネクタ。Automations内で使えるかは未検証 | `sheet` | なし |
-| **Grokbot**（X APIを使う自作bot の場合） | 可：自前サーバーがあればrelayから `push` | 可 | — | 未確定（実体が不明） | **X API利用料が必ず発生**（下表） |
-| **Muse** | **未検証**：製品を特定できず | 未検証 | 実績あり（伝言板3行目） | `sheet` | 未検証 |
+| **Grok Bot**（X / xAI） | **可**：ルーティンのWebhookトリガー（URLへPOST、`Authorization: Bearer <key>`、200は「開始した」の意味）。ほかにスケジュール（最短5分）、Bot宛メール | **可（見込み）**：クラウドコンピューターにコマンドラインがあり、通信は既定で全許可。カスタムMCP（HTTPヘッダー指定可）も可 | 可：接続したGoogleアカウントで編集できるシートのセルを読み書き | `push`（text形式）に切替可能。**本文の受け取り形式は未検証** | 有料プラン（X Premium系／SuperGrok系。価格は未検証）。ルーティン50個、1ルーティン200回/時 |
+| **Claude Code**（クラウド） | **可**：スケジュールタスクのAPIトリガー `/fire`（Bearer、`text` 本文）。30回/時 | **可**：環境の許可ドメインにrelayを追加 | 読み取りは確認済み。セル書き込みは本セッションでは不可 | `push`（text形式）に切替可能 | サブスクの利用枠を消費 |
+| **Muse**（Meta） | **不可（公式記載なし）**：定期タスク（毎日・毎週・任意間隔。最短間隔は未検証）のみ。Webhook・API・メール起動は記載なし | **可（見込み）**：自前のブラウザとVM、API/CLIのあるサービス向けにカスタムコネクタを自作し、資格情報は専用ストアに保管。任意のHTTPSやBearerヘッダーは公式には未明記 | 実績あり（伝言板3行目）。公式ページにSheetsの明記はなし | `pull`（定期タスクで `/inbox` を取得）または `sheet` | 無料枠あり、有料は$20/月・$100/月。**日本提供は未検証**（公式は米・加・シンガポール） |
+| **Dots**（OpenAI） | **MCP Eventsのみ**：自作MCPサーバーをプラグイン登録し、ChatGPTが指定するコールバックへ署名付きイベントを送る。ほかにスケジュール、Slack/Teams | **未検証**：クラウドコンピューターでシェルは動くが、ネットワークの既定設定が不明 | 未検証 | `sheet`（MCP Eventsはrelay側未実装） | Pro（$100/$200/$500/月）、Business Premiumなど。Plusは対象外 |
+| **ChatGPT**（通常チャット） | **不可**：汎用Webhookなし。スケジュールは最短1時間、イベント起動はGmail/Slack/GitHubのみ（一部未検証） | 条件付き可：カスタムGPTのActions（チャット中に人が起動した時のみ） | 実績あり（伝言板5行目） | `sheet` | — |
 
 ## 結論
 
-1. **0円で双方向リアルタイムにできるのは、現時点でClaude Codeだけ**です（受信は `/fire`、送信はHTTP）。
-2. **Grokbot ↔ Dots の実サービス間PoCは未達**です。どちらにも文書化された受信口がなく、relay側は完成していますが実経路がありません。模擬受信口では双方向とも通っています（[test-results.md](test-results.md)）。
-3. Dots・ChatGPT側をイベント駆動にする唯一の公式ルートは **MCP Events**（自作MCPサーバーがChatGPTへ署名付きイベントを送る）です。relayにMCPサーバー機能を足せば繋がる見込みですが、対象プランが公式に明記されておらず、v1.0では実装していません。
-4. それ以外の相手は、relayが**伝言板に未読行を即時追記**する形になります。相手側の巡回間隔（5分など）は残りますが、送信側は待たずに済み、承認・再送・重複排除・追跡はrelayが担います。
+1. **リアルタイムで起こせるのは Grok Bot と Claude Code の2つ**です。どちらもrelayのtext形式pushで繋がる見込みで、relay側は実装済みです。
+2. **Grok Bot ↔ Dots は「片方向だけリアルタイム」が現実的**です。
+   - Dots → Grok Bot：Dotsがrelayに送れれば（未検証）、relayがGrok BotのWebhookを即時に叩けます。
+   - Grok Bot → Dots：Dotsに届ける入口がMCP Eventsしかなく、当面は伝言板経由（Dotsの巡回待ち）です。
+3. **Dotsを起こすにはrelayにMCPサーバー機能を足す必要があります**（未実装）。要件は調査済みです。
+   - Streamable HTTPのMCPサーバーに `events/list`・`events/subscribe`・`events/unsubscribe` を実装し、ChatGPTにプラグインとして登録する。
+   - 認証はOAuthか認証なしのみで、固定のBearerトークンは使えない。
+   - 配達はStandard Webhooks形式の署名付きPOST、1件256KiBまで。
+   - 書き込み系ツールは既定で確認が入る。Dotsが無人で結果を返せるかは実機で要確認。
+4. **Museは受け身にできません**。Muse側の定期タスクでrelayの `/inbox` を取りに来る形が最速で、その間隔ぶん遅れます。
+5. **DM・TLの取得には別の条件があります**。Grok BotがXのDMやTLを読むには、ユーザー自身のX開発者アカウントとX APIクレジットが必要との公式記載があります（従量課金。DMイベント$0.010/件など）。MuseのFB/IG DM操作は公式ページに記載が見つかりませんでした。
 
 ## 料金表
 
-### 中継基盤（Cloudflare 無料プラン）
+### 中継基盤（Firebase / Google Cloud）
 
-| 項目 | 無料枠 | relayの消費 | 超過時 |
+**Cloud Functionsのデプロイには Blaze（従量課金）プランが必須**で、請求先アカウントの紐づけが要ります。予算アラートは通知のみで利用を止めません。関数を一時停止する「spend cap」（プレビュー）はありますが、反映が数分遅れ、超過分は請求されると明記されています。
+
+| 項目 | 無料枠（月。請求先アカウント単位） | relayの消費見込み | 超過時 |
 |---|---|---|---|
-| Workers リクエスト | 10万/日（UTC 0時リセット） | Cron 1,440/日＋イベント1件あたり数回 | エラー1027。課金はされない |
-| CPU時間 | 10ms/回 | 署名検証とDB操作のみ | — |
-| サブリクエスト | 50/回 | 再送は1回5件まで | — |
-| Cron Triggers | 5個/アカウント | 1個 | — |
-| D1 | 読み500万行/日、書き10万行/日、5GB | イベント1件で書き5〜10行程度 | その日はクエリがエラー |
-| クレジットカード | 不要との記載（マーケティングページ。未検証） | | |
+| 関数の呼び出し | 200万回 | sweeper 43,200回＋イベント数回/件 | $0.40/100万回 |
+| vCPU秒 | 180,000 | sweeperが1回1秒として約43,000 | 従量 |
+| メモリ（GiB秒） | 360,000 | 256MiBで約11,000 | 従量 |
+| 外向き通信 | 東京リージョンの無料分は未検証 | 1件数KB | $0.12/GB前後 |
+| Cloud Scheduler | 3ジョブ | 1ジョブ（最短1分間隔） | $0.10/ジョブ・月 |
+| Firestore | 読み5万回/日、書き2万回/日、削除2万回/日、1GiB | 巡回で読み約1万回/日、イベント1件で書き5〜8回 | 従量 |
+| Secret Manager | 有効バージョン6個、アクセス1万回 | 1個（全トークンをJSON1つに集約） | $0.06/バージョン・月 |
+| Artifact Registry | 0.5GB | 関数イメージ（掃除ポリシーを設定） | $0.10/GB・月 |
+| Cloud Build | 2,500分 | デプロイ1回数分 | $0.006/分 |
 
-relay側の上限 `DAILY_EVENT_LIMIT=2000` で、無料枠の手前で429を返します。
+無料枠の数字はFirebaseの料金ページとCloud Runの料金ページで食い違いがあり、第2世代はCloud Runとして課金されるため後者を採用しています。
+
+relay側の歯止め：`DAILY_EVENT_LIMIT=1000`（Firestoreの書き込み2万回/日の手前で429）、`maxInstances: 2`、ペイロード16KB、ホップ数上限。**これらは利用量を抑えるもので、請求0円を保証するものではありません。**
 
 ### 伝言板（Google）
 
@@ -43,41 +56,25 @@ relay側の上限 `DAILY_EVENT_LIMIT=2000` で、無料枠の手前で429を返�
 | Apps Script URL Fetch | 2万回/日 |
 | 実行時間 | 6分/回、トリガー合計90分/日 |
 | 同時実行 | 30/ユーザー |
-| 時間主導トリガー | 最短1分。実行時刻は多少ずれる。遅延の公式保証なし |
 | 注意 | APIや他スクリプトによる追記では onEdit / onChange は発火しない（公式記載）。そのためrelayはウェブアプリを直接呼ぶ |
 | 権限 | ウェブアプリは「自分として実行・全員がアクセス可」。秘密値で保護 |
 
-### X API（Grokbotが使う場合）— **0円構成は不可**
+### X API（Grok BotがDM・TLを読む場合）
 
 | 操作 | 単価 |
 |---|---|
 | 投稿の読み取り | $0.005/件（自分の投稿などは$0.001） |
-| DMイベントの読み取り・Webhook受信 | $0.010/件 |
+| DMイベントの読み取り | $0.010/件 |
 | DM送信・投稿 | $0.015/回（URL付き投稿は$0.200） |
-| 要件 | 開発者アカウント承認＋支払いカード |
 
-現行の公式料金ページは従量課金とEnterpriseのみです。旧Free/Basic/Proの扱いは未検証。**有料操作は有効化していません。**
-
-### xAI API
-
-grok-4.5〜4.7：入力$2.00／出力$6.00（100万トークンあたり）。無料クレジットは未検証。アプリ版Grokの個人チャットをAPIモデルで置き換えることはしていません。
-
-### Meta（Museが FB/IG のDMを扱う場合）
-
-| 項目 | 内容 |
-|---|---|
-| 料金 | 公式ページに課金の記載なし |
-| 受信Webhook | アプリの役割を持つ人（管理者・開発者・テスター）からのメッセージのみ、審査なしで可。**一般ユーザーのDMはApp Review（Advanced Access）が必要** |
-| 条件 | アプリを公開状態にする、Facebookページ、IGはプロアカウント |
-| 送信 | 相手の最終メッセージから24時間以内。自動応答は法令上必要な場面で開示 |
-| 本人確認 | Advanced Accessではビジネス認証を求められる可能性 |
+現行の公式料金ページは従量課金とEnterpriseのみです。**有料操作は有効化していません。**
 
 ## 出典
 
-- Cloudflare: https://developers.cloudflare.com/workers/platform/limits/ ・ https://developers.cloudflare.com/workers/platform/pricing/ ・ https://developers.cloudflare.com/d1/platform/pricing/
-- Google: https://developers.google.com/apps-script/guides/services/quotas ・ https://developers.google.com/apps-script/guides/triggers/installable ・ https://developers.google.com/workspace/sheets/api/limits
-- X: https://docs.x.com/x-api/getting-started/pricing ・ https://docs.x.com/x-api/activity/introduction
-- xAI: https://docs.x.ai/docs/models ・ https://x.ai/news/grok-automations ・ https://x.ai/news/grok-connectors
-- Meta: https://developers.facebook.com/docs/messenger-platform/webhooks ・ https://developers.facebook.com/docs/messenger-platform/instagram/features/webhook
-- OpenAI: https://learn.chatgpt.com/docs/automations ・ https://developers.openai.com/plugins/build/mcp-events ・ https://learn.chatgpt.com/docs/dots
+- Firebase / Google Cloud: https://firebase.google.com/docs/functions/get-started ・ https://firebase.google.com/docs/projects/billing/firebase-pricing-plans ・ https://firebase.google.com/docs/projects/billing/spend-caps ・ https://cloud.google.com/run/pricing ・ https://cloud.google.com/scheduler/pricing ・ https://firebase.google.com/docs/firestore/pricing ・ https://cloud.google.com/secret-manager/pricing ・ https://cloud.google.com/artifact-registry/pricing ・ https://firebase.google.com/docs/functions/manage-functions
+- Google Apps Script: https://developers.google.com/apps-script/guides/services/quotas ・ https://developers.google.com/apps-script/guides/triggers/installable
+- Grok Bot: https://x.ai/news/introducing-grok-bot ・ https://docs.x.ai/grok-bot/skills-routines-and-automations ・ https://docs.x.ai/grok-bot/computer-and-apps ・ https://docs.x.ai/grok-bot/security ・ https://docs.x.ai/grok-bot/approvals-security-and-privacy ・ https://docs.x.ai/grok-bot/faq
+- X API: https://docs.x.com/x-api/getting-started/pricing
+- Muse: https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/ ・ https://www.meta.com/help/artificial-intelligence/1484325780075655/ ・ https://www.meta.com/help/artificial-intelligence/1687253048996149/ ・ https://www.meta.com/help/artificial-intelligence/1385290430137537/ ・ https://muse.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse
+- Dots / ChatGPT: https://learn.chatgpt.com/docs/dots ・ https://developers.openai.com/plugins/build/mcp-events ・ https://developers.openai.com/plugins/build/auth ・ https://learn.chatgpt.com/docs/dots/controls ・ https://learn.chatgpt.com/docs/automations
 - Claude Code: https://code.claude.com/docs/en/routines ・ https://code.claude.com/docs/en/claude-code-on-the-web

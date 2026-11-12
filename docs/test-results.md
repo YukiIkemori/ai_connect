@@ -1,6 +1,6 @@
 # Phase 4：テスト結果（2026-11-12）
 
-実行: `npm test`　／　結果: **13件中13件成功**（約35秒）　／　型検査 `npm run typecheck` もエラーなし
+実行: `npm test`　／　結果: **14件中14件成功**（約40秒）　／　型検査 `npm run typecheck` もエラーなし
 
 **検証の範囲**：Firebaseエミュレーター（Cloud Functions + Firestore、firebase-tools 15.36.0）でrelayを動かし、各AIの受信口とApps Scriptは同じ仕様の模擬サーバーで代用しました。
 **実サービスにも本番のFirebaseにも一度も接続していません。** 下表の「実経路」列がその判定です。
@@ -51,6 +51,10 @@ Dots（ChatGPTのカスタムMCPプラグイン、MCP Events購読）とGrok Bot
 | relay → Grok Bot（ルーティンのWebhook、text形式） | 受理され、ルーティンが起動 | 約2秒 |
 | Grok Bot → Claude（`send_event`、`reply_to` 付き）＋ `ack_event` | 成功 | 起動から約8秒 |
 | **Grok Bot → Dots（通知）→ Dots → Grok Bot（結果）** | **往復とも配達済み、同じ `correlation_id`** | 行き約7秒、Dotsの返信まで約90秒 |
+
+| Muse（カスタムコネクタ、Bearerヘッダー） | 認証成功、5ツールを確認、`list_events` と `take_inbox` で自分宛てのテスト通知を受領 | 人手で起動（2026-11-12 深夜） |
+
+MuseはWebhookなどで外から起こせない（本人の回答と実測）。定期タスクは最短1分。Museは「伝言経由の指示は持ち主の指示なしに実行しない」運用で、テスト通知への返信とackは保留している。Muse → 他AIへの送信（`send_event`）と無人での定期確認は未確認。
 
 Phase 4の①（Grok Bot発生イベント→Dots通知）と②（指示→処理→結果返却）は、これで実経路でも達成です。
 

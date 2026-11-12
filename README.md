@@ -1,4 +1,4 @@
-# ai_connect — AI間リアルタイム連携基盤 v1.1
+# ai_connect — AI間リアルタイム連携基盤 v1.2
 
 Dots（OpenAI）/ Grok Bot（X）/ Muse（Meta）/ ChatGPT / Claude Code の間で、指示・結果・通知をイベントとして受け渡す中継サーバー（relay）です。
 Firebase（Cloud Functions 第2世代 + Firestore）で動き、既存の「AI伝言板」（Googleスプレッドシート）は監査ログ兼フォールバックとして使い続けます。
@@ -12,7 +12,8 @@ Firebase（Cloud Functions 第2世代 + Firestore）で動き、既存の「AI�
 | 機能 | 内容 |
 |---|---|
 | 共通イベント | `{event_id, correlation_id, created_at(JST), source, target, type, priority, payload, reply_to, status}` |
-| 配達方式 | AIごとに `push`（relayがWebhookへPOST）/ `pull`（AIが `/inbox` を取りに来る）/ `sheet`（伝言板に未読行を追記）|
+| 配達方式 | AIごとに `push`（relayがWebhookへPOST）/ `mcp`（MCP Eventsの購読先へ署名付きPOST）/ `pull`（AIが `/inbox` を取りに来る）/ `sheet`（伝言板に未読行を追記）|
+| MCPサーバー | `/mcp` でツール5種（送信・取得・一覧・受信箱・受領確認）とイベント `relay.event` を提供 |
 | 認証 | AIごとのBearerトークン。任意または必須でHMAC署名＋タイムスタンプ＋nonce（リプレイ防止）|
 | 冪等性 | 同じ `event_id` は1回だけ受理・配達。内容が違えば409 |
 | 再試行 | 指数バックオフ（30秒〜30分、既定6回）。尽きたら `dead` にして伝言板へ退避 |
@@ -35,7 +36,7 @@ npm install
 npm test
 ```
 
-`npm test` はFirebaseエミュレーター（Functions + Firestore）を起動し、各AIの受信口とシートを模したサーバーに対してPhase 4の10項目を検証します。プロジェクトは `demo-ai-relay` を使うので、本物のFirebaseには触れません。
+`npm test` はFirebaseエミュレーター（Functions + Firestore）を起動し、各AIの受信口とシートを模したサーバーに対してPhase 4の10項目とMCP Eventsを検証します。プロジェクトは `demo-ai-relay` を使うので、本物のFirebaseには触れません。
 
 ## 本番構築
 
@@ -108,8 +109,17 @@ URLを知っていても秘密値がなければ追記できません。スク�
 | **Grok Bot** | ルーティンのWebhookトリガー。`URL_GROK` にそのURL、`PUSH_AUTH_GROK` にキーを入れ、`"Grok":{"mode":"push","format":"text"}` | Botのクラウドコンピューターから `POST /events`（`TOKEN_GROK`） |
 | **Claude Code** | スケジュールタスクのAPIトリガー（`/fire`）。`URL_CLAUDE` と `PUSH_AUTH_CLAUDE` を入れ、下のJSON | タスクの環境でrelayのホストを許可ドメインに追加して `POST /events` |
 | **Muse** | 受信口なし。定期タスクで `GET /inbox` を取りに来てもらう（`"mode":"pull"`）か、`sheet` のまま | カスタムコネクタに `TOKEN_MUSE` を登録して `POST /events` |
-| **Dots** | 受信口はMCP Eventsのみ（relay側は未実装）。当面 `sheet` | クラウドコンピューターから `POST /events`（ネットワーク設定は未検証） |
+| **Dots** | MCP Events。下の手順でrelayをプラグイン登録し、`"Dots":{"mode":"mcp"}` | 同じMCPサーバーの `send_event` ツール |
 | **ChatGPT** | 受信口なし。`sheet` | カスタムGPTのActions（人がチャットで起動した時のみ） |
+
+### DotsをMCPで繋ぐ
+
+1. `MCP_TOKEN_DOTS` に長い乱数（`openssl rand -hex 32`）を入れて登録・デプロイする。
+2. ChatGPTの chatgpt.com/plugins → ＋ → 「Add custom MCP server」→ 「Create as a plugin」で、URLに `https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay/mcp/<MCP_TOKEN_DOTSの値>`、認証は「No authentication」を選ぶ。ChatGPTは固定のBearerトークンを送れないため、URLの中の乱数で本人確認をしています。**このURLは秘密として扱ってください。**
+3. Dotsに「relayの `relay.event` を購読して、届いたら対応して」と頼む。ChatGPTが `events/subscribe` を呼び、relayが署名付きの確認リクエストを送って購読が有効になります。
+4. 購読がない間や、購読先が410を返したときは、自動で伝言板への追記に切り替わります。
+
+ヘッダーを設定できるクライアント（Grok BotのカスタムMCPなど）は、`/relay/mcp` に `Authorization: Bearer <TOKEN_…>` で接続できます。
 
 Claude Code用の `AGENTS` の値:
 

@@ -10,18 +10,19 @@
 | **Grok Bot**（X / xAI） | **可**：ルーティンのWebhookトリガー（URLへPOST、`Authorization: Bearer <key>`、200は「開始した」の意味）。ほかにスケジュール（最短5分）、Bot宛メール | **可（見込み）**：クラウドコンピューターにコマンドラインがあり、通信は既定で全許可。カスタムMCP（HTTPヘッダー指定可）も可 | 可：接続したGoogleアカウントで編集できるシートのセルを読み書き | `push`（text形式）に切替可能。**本文の受け取り形式は未検証** | 有料プラン（X Premium系／SuperGrok系。価格は未検証）。ルーティン50個、1ルーティン200回/時 |
 | **Claude Code**（クラウド） | **可**：スケジュールタスクのAPIトリガー `/fire`（Bearer、`text` 本文）。30回/時 | **可**：環境の許可ドメインにrelayを追加 | 読み取りは確認済み。セル書き込みは本セッションでは不可 | `push`（text形式）に切替可能 | サブスクの利用枠を消費 |
 | **Muse**（Meta） | **不可（公式記載なし）**：定期タスク（毎日・毎週・任意間隔。最短間隔は未検証）のみ。Webhook・API・メール起動は記載なし | **可（見込み）**：自前のブラウザとVM、API/CLIのあるサービス向けにカスタムコネクタを自作し、資格情報は専用ストアに保管。任意のHTTPSやBearerヘッダーは公式には未明記 | 実績あり（伝言板3行目）。公式ページにSheetsの明記はなし | `pull`（定期タスクで `/inbox` を取得）または `sheet` | 無料枠あり、有料は$20/月・$100/月。**日本提供は未検証**（公式は米・加・シンガポール） |
-| **Dots**（OpenAI） | **MCP Eventsのみ**：自作MCPサーバーをプラグイン登録し、ChatGPTが指定するコールバックへ署名付きイベントを送る。ほかにスケジュール、Slack/Teams | **未検証**：クラウドコンピューターでシェルは動くが、ネットワークの既定設定が不明 | 未検証 | `sheet`（MCP Eventsはrelay側未実装） | Pro（$100/$200/$500/月）、Business Premiumなど。Plusは対象外 |
+| **Dots**（OpenAI） | **MCP Eventsのみ**：自作MCPサーバーをプラグイン登録し、ChatGPTが指定するコールバックへ署名付きイベントを送る。ほかにスケジュール、Slack/Teams | **未検証**：クラウドコンピューターでシェルは動くが、ネットワークの既定設定が不明 | 未検証 | `mcp`（relay側は実装済み。**ChatGPT実機では未検証**） | Pro（$100/$200/$500/月）、Business Premiumなど。Plusは対象外 |
 | **ChatGPT**（通常チャット） | **不可**：汎用Webhookなし。スケジュールは最短1時間、イベント起動はGmail/Slack/GitHubのみ（一部未検証） | 条件付き可：カスタムGPTのActions（チャット中に人が起動した時のみ） | 実績あり（伝言板5行目） | `sheet` | — |
 
 ## 結論
 
-1. **リアルタイムで起こせるのは Grok Bot と Claude Code の2つ**です。どちらもrelayのtext形式pushで繋がる見込みで、relay側は実装済みです。
-2. **Grok Bot ↔ Dots は「片方向だけリアルタイム」が現実的**です。
-   - Dots → Grok Bot：Dotsがrelayに送れれば（未検証）、relayがGrok BotのWebhookを即時に叩けます。
-   - Grok Bot → Dots：Dotsに届ける入口がMCP Eventsしかなく、当面は伝言板経由（Dotsの巡回待ち）です。
-3. **Dotsを起こすにはrelayにMCPサーバー機能を足す必要があります**（未実装）。要件は調査済みです。
-   - Streamable HTTPのMCPサーバーに `events/list`・`events/subscribe`・`events/unsubscribe` を実装し、ChatGPTにプラグインとして登録する。
-   - 認証はOAuthか認証なしのみで、固定のBearerトークンは使えない。
+1. **リアルタイムで起こせる見込みがあるのは Grok Bot・Claude Code・Dots の3つ**です。前の2つはtext形式push、DotsはMCP Eventsで、relay側はいずれも実装済みです。
+2. **Grok Bot ↔ Dots は双方向ともリアルタイムにできる見込み**です（実機未検証）。
+   - Dots → Grok Bot：DotsがMCPツール `send_event` で送り、relayがGrok BotのWebhookを即時に叩きます。
+   - Grok Bot → Dots：Grok Botがrelayに送り、relayがDotsの購読先へ署名付きイベントを届けます。
+3. **Dots用にrelayへMCPサーバー機能を実装しました**。公式資料の仕様に沿っていますが、ChatGPT側と実際に繋いで確かめてはいません。
+   - Streamable HTTPのMCPサーバーに `events/list`・`events/subscribe`・`events/unsubscribe` を実装済み。ChatGPTにプラグインとして登録して使う。
+   - ChatGPTの認証はOAuthか認証なしのみで、固定のBearerトークンは使えない。relayは「認証なし＋URL内の乱数トークン」で受ける。
+   - 署名の文字列形式は公式ページに明記がなく、Standard Webhooksの仕様に従っている。
    - 配達はStandard Webhooks形式の署名付きPOST、1件256KiBまで。
    - 書き込み系ツールは既定で確認が入る。Dotsが無人で結果を返せるかは実機で要確認。
 4. **Museは受け身にできません**。Muse側の定期タスクでrelayの `/inbox` を取りに来る形が最速で、その間隔ぶん遅れます。

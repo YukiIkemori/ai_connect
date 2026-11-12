@@ -1,3 +1,4 @@
+import { deliverToSubscriptions } from "./mcp";
 import { flushSheet, queueSheetRow, summarize } from "./sheet";
 import { EventRow, dueEvents, expiredOpen, housekeeping, resetStuck, transition } from "./store";
 import { Env, NEVER, agents, hmacHex, log, num, secret } from "./util";
@@ -29,7 +30,7 @@ export function publicEvent(ev: EventRow): Record<string, unknown> {
   };
 }
 
-function targetUrlAllowed(env: Env, url: string): boolean {
+export function targetUrlAllowed(env: Env, url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol === "https:") return true;
@@ -79,7 +80,15 @@ export async function deliver(env: Env, eventId: string): Promise<void> {
   const ev = await transition(eventId, ["queued"], (e) => (e.next_attempt_ms <= now ? { status: "delivering" } : null));
   if (!ev) return;
 
-  const mode = agents(env)[ev.target]?.mode || "sheet";
+  let mode: string = agents(env)[ev.target]?.mode || "sheet";
+  let error: string | null = null;
+  let fatal = false;
+  if (mode === "mcp") {
+    // Webhook subscription created by the agent through MCP Events; without one, fall back to the sheet.
+    const r = await deliverToSubscriptions(ev, { ...publicEvent(ev), status: "delivered" });
+    if (r === "none") mode = "sheet";
+    else if (r) ({ error, fatal } = r);
+  }
   if (mode === "pull") {
     // Nothing to send: the target collects it from GET /inbox.
     await transition(eventId, ["delivering"], { status: "queued", next_attempt_ms: NEVER });
@@ -92,14 +101,14 @@ export async function deliver(env: Env, eventId: string): Promise<void> {
     return;
   }
 
-  const error = await push(env, ev);
+  if (mode === "push") error = await push(env, ev);
   const attempts = ev.attempts + 1;
   if (!error) {
     await transition(eventId, ["delivering"], { status: "delivered", delivered_ms: now, attempts, last_error: null });
     log("delivered", { event_id: eventId, target: ev.target });
     return;
   }
-  if (attempts >= num(env.MAX_ATTEMPTS, 6)) {
+  if (fatal || attempts >= num(env.MAX_ATTEMPTS, 6)) {
     // Park it: status dead, plus a sheet row so the target (and the human) still sees it.
     await transition(eventId, ["delivering"], { status: "dead", attempts, last_error: error });
     await queueSheetRow({ ...ev, status: "dead" }, "fallback", `relay配達失敗(${attempts}回: ${error})→伝言板へ退避`);

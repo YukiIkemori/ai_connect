@@ -217,3 +217,34 @@ export async function housekeeping(now: number, keepMs: number): Promise<void> {
   for (const r of refs) batch.delete(r);
   await batch.commit();
 }
+
+// ---- MCP Events subscriptions -------------------------------------------------
+
+export interface Subscription {
+  id: string;
+  agent: string;
+  name: string;
+  url: string;
+  secret: string; // whsec_… supplied by the subscriber; used only to sign deliveries to `url`
+  refresh_before_ms: number;
+  created_ms: number;
+}
+
+const subs = () => db().collection("mcp_subscriptions");
+
+export async function putSubscription(s: Subscription): Promise<void> {
+  await subs().doc(s.id).set(s);
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  await subs().doc(id).delete();
+}
+
+/** Live subscriptions of one agent; lapsed ones (not refreshed in time) are removed. */
+export async function subscriptionsFor(agent: string, now: number): Promise<Subscription[]> {
+  const q = await subs().where("agent", "==", agent).limit(20).get();
+  const all = q.docs.map((d) => d.data() as Subscription);
+  const lapsed = all.filter((s) => s.refresh_before_ms <= now);
+  for (const s of lapsed) await deleteSubscription(s.id);
+  return all.filter((s) => s.refresh_before_ms > now);
+}

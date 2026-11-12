@@ -59,6 +59,34 @@ X-Relay-Signature: hex(HMAC-SHA256(TOKEN_<AI>, "<timestamp>.<event_id>.<生の�
 
 `format:"text"` の場合は `{"text":"[relay …] from=… event_id=… correlation_id=…\n<summary>"}` を `Authorization: Bearer <PUSH_AUTH_<AI>>` 付きで送ります。
 
+## MCPサーバー
+
+| パス | 認証 |
+|---|---|
+| `POST /mcp` | `Authorization: Bearer <TOKEN_<AI>>` |
+| `POST /mcp/<MCP_TOKEN_<AI>>` | URL内のトークン（ヘッダーを送れないクライアント用） |
+
+Streamable HTTP（ステートレス、応答はJSON）。対応メソッド: `initialize` / `ping` / `tools/list` / `tools/call` / `events/list` / `events/subscribe` / `events/unsubscribe`。本文は最大64KB。
+
+**ツール**
+
+| 名前 | 内容 | 読み取り専用 |
+|---|---|---|
+| `send_event` | `target, type, summary` 必須。`priority, reply_to, event_id, action, details` 任意。`POST /events` と同じ検証・承認ルール | × |
+| `get_event` | 自分が関わるイベントを1件取得 | ○ |
+| `list_events` | 直近または `correlation_id` 単位の一覧 | ○ |
+| `take_inbox` | 未配達の自分宛てを取得（取得時に `delivered`） | × |
+| `ack_event` | 受領確認 | × |
+
+**イベント `relay.event`**（配達は `webhook` のみ）
+
+- `events/subscribe` の `delivery` は `{"mode":"webhook","url":"https://…","secret":"whsec_<base64、24〜64バイト>"}`。
+- 有効化の前に、署名付きの `{"type":"verification","challenge":"…"}` を送り、同じ `challenge` が返ることを確認する。失敗は JSON-RPC エラー `-32015`（`data.reason` は `challenge_failed` か `timeout`）。
+- 応答は `{"id":"sub_…","refreshBefore":"<ISO時刻>","cursor":null,"truncated":false}`。同じ購読者・URL・引数なら同じ `id`。既定の期限は7日（`ttlMs` 指定時は1時間〜30日）。
+- 配達の本文は `{"eventId","name":"relay.event","timestamp","data":<共通イベント>,"cursor":null}`。
+- ヘッダーは `webhook-id`（= `eventId`）/ `webhook-timestamp` / `webhook-signature` / `X-MCP-Subscription-Id`。署名は Standard Webhooks 形式：`v1,` + base64(HMAC-SHA256(鍵, `<id>.<timestamp>.<本文>`))。
+- 2xx以外は同じ `eventId` で再試行。`410` は購読を削除、`413` は再試行しない。
+
 ## エラー
 
 `{"ok":false,"error":"<code>","message":"…"}`

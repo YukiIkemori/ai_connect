@@ -1,5 +1,6 @@
 import { authenticate } from "./auth";
-import { deliver, publicEvent } from "./deliver";
+import { deliver, publicEvent, targetUrlAllowed } from "./deliver";
+import { handleMcp } from "./mcp";
 import { queueSheetRow } from "./sheet";
 import { EventRow, countDay, getEvent, inboxTake, insertEvent, listEvents as queryEvents, ping, transition } from "./store";
 import { ADMIN, EVENT_TYPES, Env, PRIORITIES, agents, err, json, jstDay, jstIso, log, num, sha256Hex } from "./util";
@@ -33,7 +34,19 @@ async function route(req: Request, raw: string, env: Env, ctx: Ctx): Promise<Res
     } catch {
       db = "error";
     }
-    return json({ ok: db === "ok", service: "ai-relay", version: "1.0.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
+    return json({ ok: db === "ok", service: "ai-relay", version: "1.2.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
+  }
+
+  const mcp = /^\/mcp(?:\/([A-Za-z0-9_-]{16,128}))?$/.exec(path);
+  if (mcp) {
+    return handleMcp(req, raw, env, {
+      createEvent: (agent, b) => createEvent(env, ctx, agent, false, b),
+      ack: (ev, agent, b) => ack(ev, agent, false, b),
+      inbox: (agent, limit) => inbox(agent, limit),
+      list: (agent, corr, status) => listEvents(agent, false, corr, status),
+      publicEvent,
+      urlAllowed: (u) => targetUrlAllowed(env, u),
+    }, mcp[1]);
   }
 
   if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return err(413, "payload_too_large", `Body must be at most ${MAX_BODY_BYTES} bytes`);
@@ -53,8 +66,8 @@ async function route(req: Request, raw: string, env: Env, ctx: Ctx): Promise<Res
   }
 
   if (req.method === "POST" && path === "/events") return createEvent(env, ctx, auth.agent, auth.isAdmin, body);
-  if (req.method === "GET" && path === "/events") return listEvents(auth.agent, auth.isAdmin, url);
-  if (req.method === "GET" && path === "/inbox") return inbox(auth.agent, url);
+  if (req.method === "GET" && path === "/events") return listEvents(auth.agent, auth.isAdmin, url.searchParams.get("correlation_id"), url.searchParams.get("status"));
+  if (req.method === "GET" && path === "/inbox") return inbox(auth.agent, num(url.searchParams.get("limit"), 10));
 
   const m = /^\/events\/([A-Za-z0-9_-]{8,64})(?:\/(ack|approve|reject))?$/.exec(path);
   if (m) {
@@ -198,13 +211,12 @@ async function decide(env: Env, ctx: Ctx, ev: EventRow, approve: boolean, b: Rec
 }
 
 /** For agents that cannot receive webhooks but can make HTTPS requests: collect what is waiting. */
-async function inbox(caller: string, url: URL): Promise<Response> {
-  const limit = Math.min(num(url.searchParams.get("limit"), 10), 25);
-  const taken = await inboxTake(caller, Date.now(), limit);
+async function inbox(caller: string, limit: number): Promise<Response> {
+  const taken = await inboxTake(caller, Date.now(), Math.min(Math.max(limit, 1), 25));
   return json({ ok: true, events: taken.map(publicEvent) });
 }
 
-async function listEvents(caller: string, isAdmin: boolean, url: URL): Promise<Response> {
-  const rows = await queryEvents(isAdmin ? null : caller, url.searchParams.get("correlation_id"), url.searchParams.get("status"));
+async function listEvents(caller: string, isAdmin: boolean, correlationId: string | null, status: string | null): Promise<Response> {
+  const rows = await queryEvents(isAdmin ? null : caller, correlationId, status);
   return json({ ok: true, events: rows.map(publicEvent) });
 }

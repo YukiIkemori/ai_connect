@@ -13,10 +13,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PROJECT = "demo-ai-relay"; // demo-* projects never touch real Firebase resources
 const FN = `http://127.0.0.1:5001/${PROJECT}/asia-northeast1`;
 const BASE = `${FN}/relay`;
-const tok = Object.fromEntries(["Dots", "Grok", "Muse", "ChatGPT", "Claude", "ADMIN", "SHEET", "FIRE"].map((k) => [k, randomBytes(24).toString("hex")]));
+const tok = Object.fromEntries(["Dots", "Grok", "Muse", "ChatGPT", "Claude", "ADMIN", "SHEET", "FIRE", "DotsMcp", "MCPPATH"].map((k) => [k, randomBytes(24).toString("hex")]));
 
 // ---- mock receivers -------------------------------------------------------
-const got = { Dots: [], Grok: [], Claude: [], sheet: [] };
+const got = { Dots: [], Grok: [], Claude: [], sheet: [], mcp: [] };
+const whsec = "whsec_" + randomBytes(32).toString("base64");
+let mcpCallback = "ok"; // ok | bad_challenge | gone
 let grokFailures = 0; // next N deliveries to Grok fail with 503
 let grokAlwaysFail = false;
 const servers = [];
@@ -91,11 +93,21 @@ before(async () => {
     rsp.writeHead(200).end(JSON.stringify({ ok: true, appended: b.rows.length }));
   });
 
+  await listen(9105, (req, rsp, body) => {
+    // Stand-in for the callback URL ChatGPT hands to events/subscribe (Standard Webhooks verification).
+    const signed = `${req.headers["webhook-id"]}.${req.headers["webhook-timestamp"]}.${body}`;
+    const expected = "v1," + createHmac("sha256", Buffer.from(whsec.slice(6), "base64")).update(signed).digest("base64");
+    const b = JSON.parse(body);
+    got.mcp.push({ ok: expected === req.headers["webhook-signature"], id: req.headers["webhook-id"], sub: req.headers["x-mcp-subscription-id"], body: b });
+    if (b.type === "verification") return rsp.writeHead(200).end(JSON.stringify({ challenge: mcpCallback === "bad_challenge" ? "nope" : b.challenge }));
+    rsp.writeHead(mcpCallback === "gone" ? 410 : 200).end("{}");
+  });
   const secrets = {
     TOKEN_DOTS: tok.Dots, TOKEN_GROK: tok.Grok, TOKEN_MUSE: tok.Muse, TOKEN_CHATGPT: tok.ChatGPT, TOKEN_CLAUDE: tok.Claude,
     ADMIN_TOKEN: tok.ADMIN,
     URL_DOTS: "http://127.0.0.1:9101/hook", URL_GROK: "http://127.0.0.1:9102/hook", URL_CLAUDE: "http://127.0.0.1:9103/fire",
     PUSH_AUTH_CLAUDE: tok.FIRE,
+    TOKEN_DOTSMCP: tok.DotsMcp, MCP_TOKEN_DOTSMCP: tok.MCPPATH,
     SHEET_WEBHOOK_URL: "http://127.0.0.1:9104/exec", SHEET_WEBHOOK_SECRET: tok.SHEET,
   };
   writeFileSync(localFiles[1], `RELAY_SECRETS='${JSON.stringify(secrets)}'\n`);
@@ -103,7 +115,7 @@ before(async () => {
   writeFileSync(
     localFiles[0],
     [
-      `AGENTS='{"Dots":{"mode":"push"},"Grok":{"mode":"push"},"Muse":{"mode":"pull"},"ChatGPT":{"mode":"sheet"},"Claude":{"mode":"push","format":"text","headers":{"anthropic-version":"2023-06-01"}}}'`,
+      `AGENTS='{"Dots":{"mode":"push"},"Grok":{"mode":"push"},"Muse":{"mode":"pull"},"ChatGPT":{"mode":"sheet"},"DotsMcp":{"mode":"mcp"},"Claude":{"mode":"push","format":"text","headers":{"anthropic-version":"2023-06-01"}}}'`,
       "MAX_HOPS=3", "MAX_ATTEMPTS=3", "RETRY_BASE_SECONDS=1", "RETRY_CAP_SECONDS=4", "DEFAULT_TTL_SECONDS=3600", "DAILY_EVENT_LIMIT=40", "ALLOW_INSECURE_TARGETS=true",
     ].join("\n") + "\n",
   );
@@ -292,6 +304,77 @@ test("⑨ sheet records: A-G rows for results, high priority, approvals and shee
   const reasons = got.sheet.map((x) => x.key.split(":").slice(1).join(":"));
   for (const want of ["audit:event", "audit:approval", "audit:rejected", "fallback"]) assert.ok(reasons.includes(want), `sheet has ${want}`);
   assert.ok(got.sheet.filter((x) => x.key.includes(":audit")).every((x) => x.row[5] === "完了"));
+});
+
+test("⑪ MCP Events: an agent subscribes through the MCP endpoint, is woken by a signed webhook, and answers with a tool", async () => {
+  let n = 0;
+  const rpc = async (method, params, path = `/mcp/${tok.MCPPATH}`, headers = {}) => {
+    const res = await fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers }, body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }) });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  assert.equal((await rpc("initialize", {}, "/mcp/" + "x".repeat(32))).status, 401, "unknown URL token");
+  assert.equal((await rpc("initialize", {}, "/mcp")).status, 401, "no credentials");
+
+  const init = await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+  assert.equal(init.json.result.protocolVersion, "2025-03-26");
+  assert.deepEqual(init.json.result.capabilities, { tools: {}, events: {} });
+  const note = await fetch(`${BASE}/mcp/${tok.MCPPATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+  assert.equal(note.status, 202);
+  const tl = await rpc("tools/list", {}, "/mcp", { authorization: `Bearer ${tok.DotsMcp}` });
+  assert.deepEqual(tl.json.result.tools.map((t) => t.name), ["send_event", "get_event", "list_events", "take_inbox", "ack_event"]);
+  const el = await rpc("events/list", {});
+  assert.equal(el.json.result.events[0].name, "relay.event");
+  assert.deepEqual(el.json.result.events[0].delivery, ["webhook"]);
+
+  // subscribe: the callback is verified with a signed challenge before activation
+  const delivery = { mode: "webhook", url: "http://127.0.0.1:9105/callback_1", secret: whsec };
+  mcpCallback = "bad_challenge";
+  const refused = await rpc("events/subscribe", { name: "relay.event", arguments: {}, delivery });
+  assert.equal(refused.json.error.code, -32015);
+  assert.equal(refused.json.error.data.reason, "challenge_failed");
+  mcpCallback = "ok";
+  const sub = await rpc("events/subscribe", { name: "relay.event", arguments: {}, delivery, cursor: null });
+  assert.match(sub.json.result.id, /^sub_[0-9a-f]{32}$/);
+  assert.ok(Date.parse(sub.json.result.refreshBefore) > Date.now());
+  assert.ok(got.mcp.filter((x) => x.body.type === "verification").every((x) => x.ok), "verification requests are signed");
+  const again = await rpc("events/subscribe", { name: "relay.event", arguments: {}, delivery });
+  assert.equal(again.json.result.id, sub.json.result.id, "subscribing again is idempotent");
+  assert.equal((await rpc("events/subscribe", { name: "relay.event", delivery: { ...delivery, secret: "whsec_c2hvcnQ=" } })).json.error.code, -32602);
+
+  // an event from Grok wakes the subscriber
+  const ev = await post("Grok", { target: "DotsMcp", type: "notification", payload: { summary: "TLに動きあり" } });
+  const id = ev.json.event.event_id;
+  const hook = await until(() => got.mcp.find((x) => x.body.eventId === id), "MCP event delivery");
+  assert.equal(hook.ok, true, "Standard Webhooks signature verifies");
+  assert.equal(hook.id, id);
+  assert.equal(hook.sub, sub.json.result.id);
+  assert.equal(hook.body.name, "relay.event");
+  assert.equal(hook.body.data.source, "Grok");
+  assert.equal(await until(async () => (await statusOf(id)) === "delivered", "delivered"), true);
+
+  // the agent answers through tools
+  const sent = await rpc("tools/call", { name: "send_event", arguments: { target: "Grok", type: "result", summary: "確認した", reply_to: id } });
+  assert.equal(sent.json.result.isError, false);
+  const reply = JSON.parse(sent.json.result.content[0].text).event;
+  assert.equal(reply.source, "DotsMcp");
+  assert.equal(reply.correlation_id, id);
+  await until(() => got.Grok.find((x) => x.event.event_id === reply.event_id), "tool-sent event at Grok");
+  const acked = await rpc("tools/call", { name: "ack_event", arguments: { event_id: id } });
+  assert.equal(JSON.parse(acked.json.result.content[0].text).event.status, "acked");
+  const dm = await rpc("tools/call", { name: "send_event", arguments: { target: "Muse", type: "instruction", summary: "DMに返信", action: "dm_reply" } });
+  assert.equal(JSON.parse(dm.json.result.content[0].text).event.status, "awaiting_approval", "outward actions still wait for the human");
+  const other = await post("Grok", { target: "Dots", type: "notification", payload: { summary: "not yours" } });
+  const peek = await rpc("tools/call", { name: "get_event", arguments: { event_id: other.json.event.event_id } });
+  assert.equal(peek.json.result.isError, true, "cannot read other agents' events");
+  assert.equal((await rpc("nope/method", {})).json.error.code, -32601);
+
+  // 410 from the subscriber removes the subscription; the event falls back to the sheet
+  mcpCallback = "gone";
+  const g = await post("Grok", { target: "DotsMcp", type: "notification", payload: { summary: "after unsubscribe" } });
+  const row = await until(async () => { await sweep(); return got.sheet.find((x) => x.key === `${g.json.event.event_id}:fallback`); }, "sheet fallback after 410");
+  assert.equal(row.row[2], "DotsMcp");
+  mcpCallback = "ok";
+  assert.deepEqual((await rpc("events/unsubscribe", { name: "relay.event", arguments: {}, delivery: { mode: "webhook", url: delivery.url } })).json.result, {});
 });
 
 test("validation and limits", async () => {

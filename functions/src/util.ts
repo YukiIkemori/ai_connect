@@ -13,11 +13,11 @@ export interface Env {
   ADMIN_TOKEN?: string;
   SHEET_WEBHOOK_URL?: string;
   SHEET_WEBHOOK_SECRET?: string;
-  // TOKEN_<AGENT>, URL_<AGENT>, PUSH_AUTH_<AGENT> are read dynamically.
+  // TOKEN_<AGENT>, URL_<AGENT>, PUSH_AUTH_<AGENT>, MCP_TOKEN_<AGENT> are read dynamically.
   [key: string]: string | undefined;
 }
 
-export type AgentMode = "push" | "pull" | "sheet";
+export type AgentMode = "push" | "pull" | "sheet" | "mcp";
 export interface AgentConfig {
   mode: AgentMode;
   format?: "relay" | "text";

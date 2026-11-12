@@ -126,7 +126,7 @@ DotsとGrok Botは実機で確認済み、それ以外は未検証です。根�
 
 ヘッダーを設定できるクライアント（Grok BotのカスタムMCPなど）は、`/relay/mcp` に `Authorization: Bearer <TOKEN_…>` で接続できます。
 
-Claude Code用の `AGENTS` の値:
+Claude Code用の `AGENTS` の値（設定済み。`URL_CLAUDE` が未登録の間は待機扱いになり、受信箱から取得できる）:
 
 ```json
 {"Claude":{"mode":"push","format":"text","headers":{"anthropic-beta":"experimental-cc-routine-2026-04-01","anthropic-version":"2023-06-01"}}}
@@ -135,7 +135,7 @@ Claude Code用の `AGENTS` の値:
 ## いまの使い方
 
 - **Dotsから他のAIへ頼む**：Dotsに「relayでGrokに〇〇を頼んで」と言う。Dotsは送信前に確認を求める。
-- **Claude CodeからDotsに聞く**：Claude Codeに「Dotsに〇〇を聞いてきて」と言う。セッション内で返事を待って受け取る。
+- **Claude Codeから他のAIに聞く**：Claude Codeに「Dotsに〇〇を聞いてきて」と言う。セッション内で返事を待って受け取る（`scripts/claude-relay.mjs`）。
 - **Claude Code宛てに溜まった連絡を読む**：新しいセッションで「relayの受信箱を見て」と言う。
 - **Grok BotやMuseからDotsへ知らせる**：各AIに「〇〇があったらrelayでDotsに送って」と頼んでおく。
 - **止めたいとき**：Museは「`ai-relay-inbox-watch` を無効にして」と頼む。全体は復旧手順の「全停止」を参照。

@@ -40,6 +40,22 @@
 
 テストで作ったイベントはすべて `acked` か `rejected` にしてあり、配達待ちは残っていません。
 
+## 実サービスでの確認（2026-11-12 23:19〜23:39 JST）
+
+Dots（ChatGPTのカスタムMCPプラグイン、MCP Events購読）とGrok Bot（カスタムコネクタ＋Webhook付きルーティン）を本番relayに接続し、実際のやり取りを確認しました。
+
+| 経路 | 結果 | 所要時間 |
+|---|---|---|
+| relay → Dots（MCP Eventsの購読先へ署名付きPOST） | 配達済み | 数秒 |
+| Dots → Claude（`send_event`）→ Claudeが `/inbox` 取得・ack・返信 → Dots | 往復とも成功、同じ `correlation_id` | 人手で確認 |
+| relay → Grok Bot（ルーティンのWebhook、text形式） | 受理され、ルーティンが起動 | 約2秒 |
+| Grok Bot → Claude（`send_event`、`reply_to` 付き）＋ `ack_event` | 成功 | 起動から約8秒 |
+| **Grok Bot → Dots（通知）→ Dots → Grok Bot（結果）** | **往復とも配達済み、同じ `correlation_id`** | 行き約7秒、Dotsの返信まで約90秒 |
+
+Phase 4の①（Grok Bot発生イベント→Dots通知）と②（指示→処理→結果返却）は、これで実経路でも達成です。
+
+確認できていないこと：Dots・Grok Botが無人のとき（承認カードが出る状況）に最後まで動くか、購読の更新（7日後）、連続送信時の挙動。Claude Codeはこのセッションが手動で `/inbox` を取得したもので、自動起動ではありません。
+
 ## 再現方法
 
 ```bash

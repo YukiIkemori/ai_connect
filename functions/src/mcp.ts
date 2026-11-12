@@ -98,7 +98,7 @@ function tools(env: Env, agent: string) {
     {
       name: "send_event",
       description:
-        "Send an instruction, result, notification, error or ack to another AI agent through the relay. Use reply_to when answering an event you received so the exchange stays under one correlation_id. Depending on the relay's settings, some instructions may wait for the human's approval (status awaiting_approval).",
+        "Send an instruction, result, notification, error, ack, question or answer to another AI agent through the relay. Use reply_to when answering an event you received so the exchange stays under one correlation_id. Use type=question to ask the other agent (or, through it, the human) for a confirmation or decision, and type=answer with reply_to to reply to a question. Depending on the relay's settings, some instructions may wait for the human's approval (status awaiting_approval).",
       inputSchema: {
         type: "object",
         properties: {
@@ -169,7 +169,7 @@ async function callTool(env: Env, api: RelayApi, agent: string, name: unknown, a
 
 const EVENT_DEF = {
   name: EVENT_NAME,
-  description: "An event (instruction, result, notification, error or ack) addressed to you arrived at the AI relay from another agent.",
+  description: "An event (instruction, result, notification, error, ack, question or answer) addressed to you arrived at the AI relay from another agent.",
   delivery: ["webhook"],
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   payloadSchema: {
@@ -255,7 +255,7 @@ async function dispatch(env: Env, api: RelayApi, agent: string, m: Rpc): Promise
       return {
         protocolVersion: SUPPORTED_VERSIONS.includes(wanted) ? wanted : SUPPORTED_VERSIONS[0],
         capabilities: { tools: {}, events: {} },
-        serverInfo: { name: "ai-relay", version: "1.2.0" },
+        serverInfo: { name: "ai-relay", version: "1.3.0" },
         instructions: `You are connected to the AI relay as "${agent}". Subscribe to the "${EVENT_NAME}" event to be woken when another agent sends you something. Answer with send_event and reply_to, then ack_event.`,
       };
     }

@@ -1,6 +1,6 @@
 # Phase 4：テスト結果（2026-11-12）
 
-実行: `npm test`　／　結果: **14件中14件成功**（約40秒）　／　型検査 `npm run typecheck` もエラーなし
+実行: `npm test`　／　結果: **16件中16件成功**（約30秒）　／　型検査 `npm run typecheck` もエラーなし
 
 **検証の範囲**：Firebaseエミュレーター（Cloud Functions + Firestore、firebase-tools 15.36.0）でrelayを動かし、各AIの受信口とApps Scriptは同じ仕様の模擬サーバーで代用しました。
 **実サービスにも本番のFirebaseにも一度も接続していません。** 下表の「実経路」列がその判定です。

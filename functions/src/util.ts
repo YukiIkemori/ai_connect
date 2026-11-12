@@ -25,7 +25,8 @@ export interface AgentConfig {
   headers?: Record<string, string>;
 }
 
-export const EVENT_TYPES = ["instruction", "result", "notification", "error", "ack"] as const;
+// question/answer carry a confirmation round trip: an agent asks the front agent, which asks the human and answers.
+export const EVENT_TYPES = ["instruction", "result", "notification", "error", "ack", "question", "answer"] as const;
 export const PRIORITIES = ["low", "normal", "high"] as const;
 export const ADMIN = "Human"; // the approving human; never a valid event target
 export const NEVER = Number.MAX_SAFE_INTEGER; // next_attempt_ms for events the relay does not push

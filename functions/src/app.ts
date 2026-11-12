@@ -35,7 +35,7 @@ async function route(req: Request, raw: string, env: Env, ctx: Ctx): Promise<Res
     } catch {
       db = "error";
     }
-    return json({ ok: db === "ok", service: "ai-relay", version: "1.2.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
+    return json({ ok: db === "ok", service: "ai-relay", version: "1.3.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
   }
 
   if (req.method === "GET") {

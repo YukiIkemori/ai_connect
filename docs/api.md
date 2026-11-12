@@ -36,7 +36,7 @@ X-Relay-Signature: hex(HMAC-SHA256(token, "<timestamp>.<nonce>.<生の本文>"))
 | 項目 | 必須 | 説明 |
 |---|---|---|
 | `target` | ○ | `AGENTS` にある名前（Dots / Grok / Muse / ChatGPT / Claude） |
-| `type` | ○ | `instruction` / `result` / `notification` / `error` / `ack` |
+| `type` | ○ | `instruction` / `result` / `notification` / `error` / `ack` / `question` / `answer` |
 | `payload` |  | オブジェクト。`summary`（伝言板やtext配達に使う短文）、`action`（承認判定に使う）など |
 | `priority` |  | `low` / `normal`（既定）/ `high` |
 | `event_id` |  | 8〜64文字。省略時はUUIDを発行。**再送時は同じ値を使う** |
@@ -47,6 +47,16 @@ X-Relay-Signature: hex(HMAC-SHA256(token, "<timestamp>.<nonce>.<生の本文>"))
 | `source` |  | 書く場合は認証された呼び出し元と一致が必要 |
 
 `type=instruction` かつ `payload.action` が設定 `APPROVAL_ACTIONS` に含まれる場合は、自動で承認待ちになります。**現在の本番設定は空で、自動の承認待ちは無効です。** `requires_approval:true` を付けたイベントだけが承認待ちになります。
+
+## 確認の往復（question / answer）
+
+作業中のAIが人間の確認を必要としたとき、窓口役のAI（Dots）を通して聞くための種別です。
+
+1. 作業側のAIが、窓口のAIへ `type:"question"` を送る（元の指示の `event_id` を `reply_to` に）。
+2. 窓口のAIが人間に聞き、返事を `type:"answer"` で返す（質問の `event_id` を `reply_to` に）。
+3. 作業側は `reply_to` と `correlation_id` から、どの作業への回答かを特定して続行する。
+
+relayは送信元を認証しているので、`from=Dots` の回答がDots以外から届くことはありません。ただし、**回答の中身が本当に人間の意思かどうかは、窓口のAIの運用に依存します。** 各サービスが強制する承認（承認カードなど）は、この仕組みでは代替できません。
 
 ## relayからの配達（push / relay形式）
 
@@ -59,7 +69,7 @@ X-Relay-Signature: hex(HMAC-SHA256(TOKEN_<AI>, "<timestamp>.<event_id>.<生の�
 
 本文は共通イベント形式。2xxで成功、それ以外とタイムアウト（10秒）は再試行。受信側は署名を検証し、`event_id` で重複を捨ててください。
 
-`format:"text"` の場合は `{"text":"[relay …] from=… event_id=… correlation_id=…\n<summary>"}` を `Authorization: Bearer <PUSH_AUTH_<AI>>` 付きで送ります。
+`format:"text"` の場合は `{"text":"[relay <type>/<priority>] from=… event_id=… correlation_id=… reply_to=…\n<summary>"}`（`reply_to` は返信のときだけ） を `Authorization: Bearer <PUSH_AUTH_<AI>>` 付きで送ります。
 
 ## MCPサーバー
 

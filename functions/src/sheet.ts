@@ -7,6 +7,8 @@ const KIND: Record<string, string> = {
   notification: "連絡",
   error: "報告",
   ack: "報告",
+  question: "質問",
+  answer: "報告",
 };
 
 /** Short, human-readable text for the sheet. The full payload never goes to the sheet. */

@@ -55,7 +55,7 @@ async function push(env: Env, ev: EventRow): Promise<string | null> {
     const auth = secret(env, "PUSH_AUTH", ev.target);
     if (auth) headers["authorization"] = `Bearer ${auth}`;
     body = JSON.stringify({
-      text: `[relay ${ev.type}/${ev.priority}] from=${ev.source} event_id=${ev.event_id} correlation_id=${ev.correlation_id}\n${summarize(ev, 4000)}`,
+      text: `[relay ${ev.type}/${ev.priority}] from=${ev.source} event_id=${ev.event_id} correlation_id=${ev.correlation_id}${ev.reply_to ? ` reply_to=${ev.reply_to}` : ""}\n${summarize(ev, 4000)}`,
     });
   } else {
     const token = secret(env, "TOKEN", ev.target);

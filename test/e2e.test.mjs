@@ -411,6 +411,19 @@ test("approval page: static UI without data; approving through the API releases 
   assert.equal(hook.event.approved_by, "admin page");
 });
 
+test("question → answer: a confirmation round trip stays in one thread and names what it answers", async () => {
+  const ins = await post("Dots", { target: "Claude", type: "instruction", payload: { summary: "DMを送って" } });
+  const q = await post("Claude", { target: "Dots", type: "question", reply_to: ins.json.event.event_id, payload: { summary: "この文面でいい？「やっほー」" } });
+  assert.equal(q.status, 201);
+  const atDots = await until(() => got.Dots.find((x) => x.event.event_id === q.json.event.event_id), "question at Dots");
+  assert.equal(atDots.event.type, "question");
+  const a = await post("Dots", { target: "Claude", type: "answer", reply_to: q.json.event.event_id, payload: { summary: "その文面でOK。送って" } });
+  assert.equal(a.json.event.correlation_id, ins.json.event.event_id);
+  const fired = await until(() => got.Claude.find((x) => x.body.text.includes(a.json.event.event_id)), "answer at Claude");
+  assert.match(fired.body.text, new RegExp(`^\\[relay answer/normal\\] from=Dots .* reply_to=${q.json.event.event_id}\\n`));
+  assert.equal((await api("GET", `/events?correlation_id=${ins.json.event.event_id}`, { as: "Dots" })).json.events.length, 3);
+});
+
 test("validation and limits", async () => {
   assert.equal((await post("Grok", { target: "Nobody", type: "notification" })).status, 422);
   assert.equal((await post("Grok", { target: "Dots", type: "shout" })).status, 422);

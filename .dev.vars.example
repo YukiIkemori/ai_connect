@@ -1,0 +1,23 @@
+# ローカル開発用（.dev.vars にコピー）。本番は `npx wrangler secret put <NAME>` で登録する。
+# 値は `openssl rand -hex 32` などで生成。シート・GitHub・チャットに貼らないこと。
+
+# 各AIが relay を呼ぶときの Bearer トークン（兼 HMAC 鍵、兼 relay→そのAIへの署名鍵）
+TOKEN_DOTS=
+TOKEN_GROK=
+TOKEN_MUSE=
+TOKEN_CHATGPT=
+TOKEN_CLAUDE=
+
+# 人間（承認者）専用。承認・却下・全件閲覧ができる。AIには渡さない。
+ADMIN_TOKEN=
+
+# push モードのAIの受信URL（https のみ）。未設定のAIは wrangler.toml の AGENTS で pull か sheet にする。
+URL_DOTS=
+URL_GROK=
+# format:"text" のAI（例: Claude Code クラウドのスケジュールタスクの /fire URL）と、その Bearer
+URL_CLAUDE=
+PUSH_AUTH_CLAUDE=
+
+# AI伝言板 追記用 Apps Script ウェブアプリ
+SHEET_WEBHOOK_URL=
+SHEET_WEBHOOK_SECRET=

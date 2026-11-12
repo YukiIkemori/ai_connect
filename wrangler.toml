@@ -1,0 +1,35 @@
+name = "ai-relay"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Retry / expiry / sheet flush sweep. 1440 invocations/day (free plan: 100,000 requests/day).
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-relay"
+database_id = "REPLACE_WITH_D1_DATABASE_ID" # `npx wrangler d1 create ai-relay` prints this
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+# Non-secret settings. Secrets (TOKEN_*, URL_*, PUSH_AUTH_*, ADMIN_TOKEN, SHEET_*) go in
+# `wrangler secret put` (production) or `.dev.vars` (local) — never in this file.
+[vars]
+# mode: push  = relay POSTs to URL_<NAME> (signed)
+#       pull  = the agent fetches GET /inbox itself
+#       sheet = relay appends a row to AI伝言板 addressed to the agent (it is read on the agent's next patrol)
+# format (push only): relay = signed JSON event, text = {"text": "..."} with Authorization from PUSH_AUTH_<NAME>
+AGENTS = '{"Dots":{"mode":"sheet"},"Grok":{"mode":"sheet"},"Muse":{"mode":"sheet"},"ChatGPT":{"mode":"sheet"},"Claude":{"mode":"sheet"}}'
+MAX_HOPS = "5"
+MAX_ATTEMPTS = "6"
+RETRY_BASE_SECONDS = "30"
+RETRY_CAP_SECONDS = "1800"
+DEFAULT_TTL_SECONDS = "86400"
+DAILY_EVENT_LIMIT = "2000"
+REQUIRE_SIGNATURE = "false"
+APPROVAL_ACTIONS = "dm_reply,dm_send,post,delete,billing,purchase"
+RETENTION_DAYS = "30"

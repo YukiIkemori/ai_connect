@@ -111,7 +111,7 @@ URLを知っていても秘密値がなければ追記できません。スク�
 
 | AI | relay → AI | AI → relay |
 |---|---|---|
-| **Grok Bot** | ルーティンのWebhookトリガー。`URL_GROK` にそのURL、`PUSH_AUTH_GROK` にキーを入れ、`"Grok":{"mode":"push","format":"text"}` | Botのクラウドコンピューターから `POST /events`（`TOKEN_GROK`） |
+| **Grok Bot** | ルーティンのWebhookトリガー。`URL_GROK` に「POST to」のURL、`PUSH_AUTH_GROK` に「key」を登録（設定は `push`/`text` 済み。未登録の間は伝言板扱い） | カスタムコネクタ（Remote HTTPS）で `/relay/mcp` に接続し、HTTPヘッダーに `Authorization: Bearer <TOKEN_GROK>` |
 | **Claude Code** | スケジュールタスクのAPIトリガー（`/fire`）。`URL_CLAUDE` と `PUSH_AUTH_CLAUDE` を入れ、下のJSON | タスクの環境でrelayのホストを許可ドメインに追加して `POST /events` |
 | **Muse** | 受信口なし。定期タスクで `GET /inbox` を取りに来てもらう（`"mode":"pull"`）か、`sheet` のまま | カスタムコネクタに `TOKEN_MUSE` を登録して `POST /events` |
 | **Dots** | MCP Events。下の手順でrelayをプラグイン登録し、`"Dots":{"mode":"mcp"}` | 同じMCPサーバーの `send_event` ツール |

@@ -89,6 +89,8 @@ export async function deliver(env: Env, eventId: string): Promise<void> {
     if (r === "none") mode = "sheet";
     else if (r) ({ error, fatal } = r);
   }
+  // A push target whose webhook URL is not registered yet is treated like a sheet target instead of failing.
+  if (mode === "push" && !secret(env, "URL", ev.target)) mode = "sheet";
   if (mode === "pull") {
     // Nothing to send: the target collects it from GET /inbox.
     await transition(eventId, ["delivering"], { status: "queued", next_attempt_ms: NEVER });

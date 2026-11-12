@@ -132,6 +132,16 @@ Claude Code用の `AGENTS` の値:
 {"Claude":{"mode":"push","format":"text","headers":{"anthropic-beta":"experimental-cc-routine-2026-04-01","anthropic-version":"2023-06-01"}}}
 ```
 
+## いまの使い方
+
+- **Dotsから他のAIへ頼む**：Dotsに「relayでGrokに〇〇を頼んで」と言う。Dotsは送信前に確認を求める。
+- **Claude CodeからDotsに聞く**：Claude Codeに「Dotsに〇〇を聞いてきて」と言う。セッション内で返事を待って受け取る。
+- **Claude Code宛てに溜まった連絡を読む**：新しいセッションで「relayの受信箱を見て」と言う。
+- **Grok BotやMuseからDotsへ知らせる**：各AIに「〇〇があったらrelayでDotsに送って」と頼んでおく。
+- **止めたいとき**：Museは「`ai-relay-inbox-watch` を無効にして」と頼む。全体は復旧手順の「全停止」を参照。
+
+DMなど外の人へのメッセージ送信は、各サービスの設計上、自動化できません（[docs/limitations.md](docs/limitations.md)）。
+
 ## 承認ページ
 
 現在の設定では、AI間の指示は承認なしで相手に渡ります（各AI自身の承認設定は別に働きます）。`APPROVAL_ACTIONS` を設定した場合や、`requires_approval:true` 付きのイベントは「承認待ち」で止まり、次のページで承認・却下します。やり取りの履歴もここで見られます。

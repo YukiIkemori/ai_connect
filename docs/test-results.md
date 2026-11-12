@@ -22,6 +22,24 @@
 
 追加で確認したもの：`/health` がデータを返さないこと、不正な宛先・種類・JSON・16KB超の拒否。
 
+## 本番での確認（2026-11-12 22:28 JST）
+
+`https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay` に対して、relay単体の動作を実際に確認しました。各AIや伝言板にはまだ繋いでいません。
+
+| 確認 | 結果 |
+|---|---|
+| `/health` | 200、`db: ok`（初回は起動待ちで約1.8秒、以後0.2秒前後） |
+| トークンなし・誤り／送信元の詐称 | 401／403 |
+| Grok → Dots の通知、同じ `event_id` の再送 | 201、再送は `duplicate: true` |
+| 第三者による閲覧 | 404 |
+| Dotsの `/inbox` 取得 → `reply_to` 付きの返信 → ack | 取得1件、返信は同じ `correlation_id` で `hop_count` 1、`acked` |
+| DM返信の指示 | `awaiting_approval`。AIの承認は403、人間用トークンで却下できる |
+| MCP（URLトークン） | `initialize`・`tools/list`（5ツール）・`events/list`（`relay.event`）が応答。誤ったトークンは401 |
+| 毎分の巡回（sweeper） | 1分ごとに実行され、エラーなし |
+| 一覧取得（`GET /events`） | デプロイ直後の数分はインデックス作成中で500。作成完了後は200 |
+
+テストで作ったイベントはすべて `acked` か `rejected` にしてあり、配達待ちは残っていません。
+
 ## 再現方法
 
 ```bash

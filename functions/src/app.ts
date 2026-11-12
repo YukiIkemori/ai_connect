@@ -1,3 +1,4 @@
+import { adminPage } from "./admin";
 import { authenticate } from "./auth";
 import { deliver, publicEvent, targetUrlAllowed } from "./deliver";
 import { handleMcp } from "./mcp";
@@ -35,6 +36,11 @@ async function route(req: Request, raw: string, env: Env, ctx: Ctx): Promise<Res
       db = "error";
     }
     return json({ ok: db === "ok", service: "ai-relay", version: "1.2.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
+  }
+
+  if (req.method === "GET") {
+    const page = adminPage(path); // static approval UI; every action it takes still needs the admin token
+    if (page) return page;
   }
 
   // Watch endpoint for agents whose lightweight monitors cannot hold credentials: the URL carries a

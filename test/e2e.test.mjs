@@ -116,7 +116,7 @@ before(async () => {
     localFiles[0],
     [
       `AGENTS='{"Dots":{"mode":"push"},"Grok":{"mode":"push"},"Muse":{"mode":"pull"},"ChatGPT":{"mode":"sheet"},"DotsMcp":{"mode":"mcp"},"Claude":{"mode":"push","format":"text","headers":{"anthropic-version":"2023-06-01"}}}'`,
-      "MAX_HOPS=3", "MAX_ATTEMPTS=3", "RETRY_BASE_SECONDS=1", "RETRY_CAP_SECONDS=4", "DEFAULT_TTL_SECONDS=3600", "DAILY_EVENT_LIMIT=40", "ALLOW_INSECURE_TARGETS=true",
+      "MAX_HOPS=3", "MAX_ATTEMPTS=3", "RETRY_BASE_SECONDS=1", "RETRY_CAP_SECONDS=4", "DEFAULT_TTL_SECONDS=3600", "DAILY_EVENT_LIMIT=40", "ALLOW_INSECURE_TARGETS=true", "APPROVAL_ACTIONS=dm_reply,dm_send,post,delete,billing,purchase",
     ].join("\n") + "\n",
   );
   execFileSync("npm", ["run", "build"], { cwd: join(root, "functions"), stdio: "pipe" });
@@ -388,6 +388,27 @@ test("watch endpoint: a credential-free monitor sees only the number of waiting 
   assert.equal((await api("POST", `/events/${e.json.event.event_id}/ack`, { token: tok.WATCH, body: {} })).status, 401, "a watch id is not a token");
   await api("GET", "/inbox", { as: "Muse" });
   assert.equal((await pending()).pending, 0);
+});
+
+test("approval page: static UI without data; approving through the API releases the event", async () => {
+  const page = await fetch(`${BASE}/admin`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get("content-type"), /text\/html/);
+  assert.match(page.headers.get("content-security-policy"), /default-src 'none'/);
+  const html = await page.text();
+  const js = await (await fetch(`${BASE}/admin.js`)).text();
+  for (const secret of Object.values(tok)) assert.equal(html.includes(secret) || js.includes(secret), false, "no token in the page");
+  assert.match(js, /awaiting_approval/);
+
+  const ins = await post("Dots", { target: "Grok", type: "instruction", payload: { action: "dm_send", summary: "DMを送って" } });
+  const id = ins.json.event.event_id;
+  const waiting = await api("GET", "/events?status=awaiting_approval", { as: "ADMIN" });
+  assert.ok(waiting.json.events.some((e) => e.event_id === id), "the page's query lists it");
+  assert.equal(got.Grok.some((x) => x.event.event_id === id), false);
+  const ap = await api("POST", `/events/${id}/approve`, { as: "ADMIN", body: { by: "admin page" } });
+  assert.equal(ap.status, 200);
+  const hook = await until(() => got.Grok.find((x) => x.event.event_id === id), "approved instruction at Grok");
+  assert.equal(hook.event.approved_by, "admin page");
 });
 
 test("validation and limits", async () => {

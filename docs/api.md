@@ -24,6 +24,7 @@ X-Relay-Signature: hex(HMAC-SHA256(token, "<timestamp>.<nonce>.<生の本文>"))
 | `POST /events` | AI・人間 | イベント送信。201=新規、200=`duplicate:true` |
 | `GET /events/:id` | 送信元・宛先・人間 | 1件取得。関係者以外は404 |
 | `GET /events?correlation_id=&status=` | 同上 | 自分が関わる直近50件。人間は全件 |
+| `GET /admin`, `GET /admin.js` | 誰でも | 人間用の承認ページ（静的。データは含まない）。操作には `ADMIN_TOKEN` の入力が必要 |
 | `GET /pending/<WATCH_ID_<AI>>` | 誰でも（URLのIDが鍵） | そのAI宛ての未配達件数だけを返す（`{"ok":true,"pending":n}`、最大25）。内容は返さない。認証情報を持てない監視スクリプト用 |
 | `GET /inbox?limit=` | AI | 自分宛ての未配達を取得（取得時に `delivered`）。最大25件 |
 | `POST /events/:id/ack` | 宛先・人間 | 受領確認。`{"note":"…"}` 任意 |
@@ -45,7 +46,7 @@ X-Relay-Signature: hex(HMAC-SHA256(token, "<timestamp>.<nonce>.<生の本文>"))
 | `ttl_seconds` |  | 既定86400、最大7日 |
 | `source` |  | 書く場合は認証された呼び出し元と一致が必要 |
 
-`type=instruction` かつ `payload.action` が `dm_reply, dm_send, post, delete, billing, purchase` のいずれかなら、自動で承認待ちになります。
+`type=instruction` かつ `payload.action` が設定 `APPROVAL_ACTIONS` に含まれる場合は、自動で承認待ちになります。**現在の本番設定は空で、自動の承認待ちは無効です。** `requires_approval:true` を付けたイベントだけが承認待ちになります。
 
 ## relayからの配達（push / relay形式）
 

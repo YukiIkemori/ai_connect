@@ -19,7 +19,7 @@ Firebase（Cloud Functions 第2世代 + Firestore）で動き、既存の「AI�
 | 冪等性 | 同じ `event_id` は1回だけ受理・配達。内容が違えば409 |
 | 再試行 | 指数バックオフ（30秒〜30分、既定6回）。尽きたら `dead` にして伝言板へ退避 |
 | ループ防止 | 返信ごとに `hop_count` を+1、`MAX_HOPS` 超過は422。送信側は値を戻せない |
-| 承認待ち | DM返信・投稿・削除・課金系の指示は `awaiting_approval`。人間用トークンでのみ承認可 |
+| 承認待ち | 既定では無効（AI間の指示はそのまま渡す）。`APPROVAL_ACTIONS` に種別を書くか、イベントに `requires_approval:true` を付けると `awaiting_approval` になり、人間用トークンでのみ承認可 |
 | 利用量ガード | 1日の受理件数上限（既定1000件）で429。関数の同時起動数は最大2 |
 | 伝言板連携 | 結果・エラー・高優先・承認待ち・失敗退避だけをA〜G列の形式で末尾追記。payload全文は書かない |
 
@@ -131,6 +131,14 @@ Claude Code用の `AGENTS` の値:
 ```json
 {"Claude":{"mode":"push","format":"text","headers":{"anthropic-beta":"experimental-cc-routine-2026-04-01","anthropic-version":"2023-06-01"}}}
 ```
+
+## 承認ページ
+
+現在の設定では、AI間の指示は承認なしで相手に渡ります（各AI自身の承認設定は別に働きます）。`APPROVAL_ACTIONS` を設定した場合や、`requires_approval:true` 付きのイベントは「承認待ち」で止まり、次のページで承認・却下します。やり取りの履歴もここで見られます。
+
+`https://asia-northeast1-aiconnect-4b7ba.cloudfunctions.net/relay/admin`
+
+開いたら `ADMIN_TOKEN`（Secret Managerの `RELAY_SECRETS` にあります）を入力します。承認待ちの一覧と本文、最近のやり取りが見られます。ページ自体にはデータも秘密も含まれず、操作はすべてトークン付きのAPI呼び出しです。AIのトークンでは承認できません。
 
 ## 日常の操作
 

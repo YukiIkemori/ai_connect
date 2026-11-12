@@ -98,7 +98,7 @@ function tools(env: Env, agent: string) {
     {
       name: "send_event",
       description:
-        "Send an instruction, result, notification, error or ack to another AI agent through the relay. Use reply_to when answering an event you received so the exchange stays under one correlation_id. Instructions that send DMs, post, delete or spend money wait for the human's approval.",
+        "Send an instruction, result, notification, error or ack to another AI agent through the relay. Use reply_to when answering an event you received so the exchange stays under one correlation_id. Depending on the relay's settings, some instructions may wait for the human's approval (status awaiting_approval).",
       inputSchema: {
         type: "object",
         properties: {
@@ -108,7 +108,7 @@ function tools(env: Env, agent: string) {
           priority: { type: "string", enum: [...PRIORITIES] },
           reply_to: { ...id, description: "event_id this answers" },
           event_id: { ...id, description: "Reuse the same id when retrying the same message" },
-          action: { type: "string", description: "e.g. dm_reply, post, delete, billing (these require human approval)" },
+          action: { type: "string", description: "What the instruction asks for, e.g. dm_reply, post, delete, billing" },
           details: { type: "object", description: "Optional structured data for the receiver" },
         },
         required: ["target", "type", "summary"],

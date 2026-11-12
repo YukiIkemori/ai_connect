@@ -107,7 +107,7 @@ URLを知っていても秘密値がなければ追記できません。スク�
 
 ## 各AIの繋ぎ方
 
-DotsとGrok Botは実機で確認済み、それ以外は未検証です。根拠は [docs/feasibility.md](docs/feasibility.md)、確認結果は [docs/test-results.md](docs/test-results.md)。
+Dots・Grok Bot・Muse・Claude Codeの4体は実機で接続と往復を確認済みです。ChatGPT（通常チャット）は宛先名として登録してあるだけで、未接続です。根拠は [docs/feasibility.md](docs/feasibility.md)、確認結果は [docs/test-results.md](docs/test-results.md)。
 
 | AI | relay → AI | AI → relay |
 |---|---|---|

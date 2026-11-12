@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const file = "secrets.json";
-const random = ["ADMIN_TOKEN", "TOKEN_DOTS", "TOKEN_GROK", "TOKEN_MUSE", "TOKEN_CHATGPT", "TOKEN_CLAUDE", "MCP_TOKEN_DOTS", "MCP_TOKEN_MUSE", "SHEET_WEBHOOK_SECRET"];
+const random = ["ADMIN_TOKEN", "TOKEN_DOTS", "TOKEN_GROK", "TOKEN_MUSE", "TOKEN_CHATGPT", "TOKEN_CLAUDE", "MCP_TOKEN_DOTS", "MCP_TOKEN_MUSE", "WATCH_ID_MUSE", "SHEET_WEBHOOK_SECRET"];
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
 let added = 0;
 for (const k of random) if (!current[k]) (current[k] = randomBytes(32).toString("hex")), added++;

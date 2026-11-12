@@ -24,6 +24,7 @@ X-Relay-Signature: hex(HMAC-SHA256(token, "<timestamp>.<nonce>.<生の本文>"))
 | `POST /events` | AI・人間 | イベント送信。201=新規、200=`duplicate:true` |
 | `GET /events/:id` | 送信元・宛先・人間 | 1件取得。関係者以外は404 |
 | `GET /events?correlation_id=&status=` | 同上 | 自分が関わる直近50件。人間は全件 |
+| `GET /pending/<WATCH_ID_<AI>>` | 誰でも（URLのIDが鍵） | そのAI宛ての未配達件数だけを返す（`{"ok":true,"pending":n}`、最大25）。内容は返さない。認証情報を持てない監視スクリプト用 |
 | `GET /inbox?limit=` | AI | 自分宛ての未配達を取得（取得時に `delivered`）。最大25件 |
 | `POST /events/:id/ack` | 宛先・人間 | 受領確認。`{"note":"…"}` 任意 |
 | `POST /events/:id/approve` | 人間のみ | 承認して配達へ。`{"by":"名前"}` 任意 |

@@ -145,6 +145,12 @@ export async function inboxTake(caller: string, now: number, limit: number): Pro
   return taken;
 }
 
+/** How many events are waiting for this agent (capped). No event content is read out. */
+export async function pendingCount(agent: string, now: number): Promise<number> {
+  const q = await events().where("target", "==", agent).where("status", "==", "queued").limit(25).get();
+  return q.docs.filter((d) => (d.data() as EventRow).expires_ms > now).length;
+}
+
 export async function listEvents(caller: string | null, correlationId: string | null, status: string | null): Promise<EventRow[]> {
   let rows: EventRow[];
   if (correlationId) {

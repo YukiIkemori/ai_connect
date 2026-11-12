@@ -2,8 +2,8 @@ import { authenticate } from "./auth";
 import { deliver, publicEvent, targetUrlAllowed } from "./deliver";
 import { handleMcp } from "./mcp";
 import { queueSheetRow } from "./sheet";
-import { EventRow, countDay, getEvent, inboxTake, insertEvent, listEvents as queryEvents, ping, transition } from "./store";
-import { ADMIN, EVENT_TYPES, Env, PRIORITIES, agents, err, json, jstDay, jstIso, log, num, sha256Hex } from "./util";
+import { EventRow, countDay, getEvent, inboxTake, insertEvent, listEvents as queryEvents, pendingCount, ping, transition } from "./store";
+import { ADMIN, EVENT_TYPES, Env, PRIORITIES, agents, err, json, jstDay, jstIso, log, num, safeEqual, secret, sha256Hex } from "./util";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -35,6 +35,19 @@ async function route(req: Request, raw: string, env: Env, ctx: Ctx): Promise<Res
       db = "error";
     }
     return json({ ok: db === "ok", service: "ai-relay", version: "1.2.0", db, time: jstIso(Date.now()) }, db === "ok" ? 200 : 503);
+  }
+
+  // Watch endpoint for agents whose lightweight monitors cannot hold credentials: the URL carries a
+  // watch id (WATCH_ID_<AGENT>) that reveals only how many events are waiting, never their content.
+  const watch = /^\/pending\/([A-Za-z0-9_-]{16,128})$/.exec(path);
+  if (watch && req.method === "GET") {
+    let who: string | undefined;
+    for (const name of Object.keys(agents(env))) {
+      const id = secret(env, "WATCH_ID", name);
+      if (id && (await safeEqual(watch[1], id)) && !who) who = name;
+    }
+    if (!who) return err(404, "not_found", "No such route");
+    return json({ ok: true, pending: await pendingCount(who, Date.now()) });
   }
 
   const mcp = /^\/mcp(?:\/([A-Za-z0-9_-]{16,128}))?$/.exec(path);

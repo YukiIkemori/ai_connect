@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PROJECT = "demo-ai-relay"; // demo-* projects never touch real Firebase resources
 const FN = `http://127.0.0.1:5001/${PROJECT}/asia-northeast1`;
 const BASE = `${FN}/relay`;
-const tok = Object.fromEntries(["Dots", "Grok", "Muse", "ChatGPT", "Claude", "ADMIN", "SHEET", "FIRE", "DotsMcp", "MCPPATH"].map((k) => [k, randomBytes(24).toString("hex")]));
+const tok = Object.fromEntries(["Dots", "Grok", "Muse", "ChatGPT", "Claude", "ADMIN", "SHEET", "FIRE", "DotsMcp", "MCPPATH", "WATCH"].map((k) => [k, randomBytes(24).toString("hex")]));
 
 // ---- mock receivers -------------------------------------------------------
 const got = { Dots: [], Grok: [], Claude: [], sheet: [], mcp: [] };
@@ -107,7 +107,7 @@ before(async () => {
     ADMIN_TOKEN: tok.ADMIN,
     URL_DOTS: "http://127.0.0.1:9101/hook", URL_GROK: "http://127.0.0.1:9102/hook", URL_CLAUDE: "http://127.0.0.1:9103/fire",
     PUSH_AUTH_CLAUDE: tok.FIRE,
-    TOKEN_DOTSMCP: tok.DotsMcp, MCP_TOKEN_DOTSMCP: tok.MCPPATH,
+    TOKEN_DOTSMCP: tok.DotsMcp, MCP_TOKEN_DOTSMCP: tok.MCPPATH, WATCH_ID_MUSE: tok.WATCH,
     SHEET_WEBHOOK_URL: "http://127.0.0.1:9104/exec", SHEET_WEBHOOK_SECRET: tok.SHEET,
   };
   writeFileSync(localFiles[1], `RELAY_SECRETS='${JSON.stringify(secrets)}'\n`);
@@ -375,6 +375,19 @@ test("⑪ MCP Events: an agent subscribes through the MCP endpoint, is woken by 
   assert.equal(row.row[2], "DotsMcp");
   mcpCallback = "ok";
   assert.deepEqual((await rpc("events/unsubscribe", { name: "relay.event", arguments: {}, delivery: { mode: "webhook", url: delivery.url } })).json.result, {});
+});
+
+test("watch endpoint: a credential-free monitor sees only the number of waiting events", async () => {
+  const pending = async () => (await api("GET", `/pending/${tok.WATCH}`)).json;
+  await api("GET", "/inbox", { as: "Muse" }); // drain
+  assert.deepEqual(await pending(), { ok: true, pending: 0 });
+  const e = await post("Grok", { target: "Muse", type: "notification", payload: { summary: "secret text" } });
+  const seen = await until(async () => { const p = await pending(); return p.pending === 1 ? p : null; }, "pending count");
+  assert.deepEqual(Object.keys(seen).sort(), ["ok", "pending"], "no event content is exposed");
+  assert.equal((await api("GET", "/pending/" + "z".repeat(48))).status, 404, "unknown watch id");
+  assert.equal((await api("POST", `/events/${e.json.event.event_id}/ack`, { token: tok.WATCH, body: {} })).status, 401, "a watch id is not a token");
+  await api("GET", "/inbox", { as: "Muse" });
+  assert.equal((await pending()).pending, 0);
 });
 
 test("validation and limits", async () => {

@@ -13,7 +13,7 @@ export interface Env {
   ADMIN_TOKEN?: string;
   SHEET_WEBHOOK_URL?: string;
   SHEET_WEBHOOK_SECRET?: string;
-  // TOKEN_<AGENT>, URL_<AGENT>, PUSH_AUTH_<AGENT>, MCP_TOKEN_<AGENT> are read dynamically.
+  // TOKEN_<AGENT>, URL_<AGENT>, PUSH_AUTH_<AGENT>, MCP_TOKEN_<AGENT>, WATCH_ID_<AGENT> are read dynamically.
   [key: string]: string | undefined;
 }
 

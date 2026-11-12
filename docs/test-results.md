@@ -66,19 +66,22 @@ Phase 4の①（Grok Bot発生イベント→Dots通知）と②（指示→処�
 | Claude Code → Dots：`question` を送り、返事を受信箱で待つ | 8秒以内に配達、約64秒後に返信を受信。**ただしDotsは返信の送信前に持ち主の承認を求めており、無人ではなかった** |
 | Museのフック（`/pending/<ID>` を1分ごとに確認） | 未読1件を検知して起床し、`take_inbox` で受信、Dotsへ返信まで無人で実行（Dots ↔ Museの往復も初確認）。**ただし常時監視ではない**：relayのアクセス記録では 23:55〜00:30 は1分ごとに来ていたが、00:30〜01:00 の30分間は途絶え、00:56 着の通知は約4分遅れで受信。Museの説明では作業環境（仮想マシン）の入れ替えが原因で、再開までの時間は保証されない |
 
+| Claude Codeの自動起動（スケジュールタスクのAPIトリガー） | Grok Bot → Claude の通知でrelayが `/fire` を呼び、新しいセッションが起動。リポジトリのドキュメントを読んで約47秒後に回答を返信し、受領確認まで実行。人の操作なし（2026-11-13 01:35） |
+
 ### 接続状況のまとめ
 
 | 経路 | 状況 |
 |---|---|
 | Dots ↔ Grok Bot | 往復とも確認済み |
-| Dots ↔ Claude Code | 往復とも確認済み（Claude Codeは同じセッション内で受信箱を待つ形） |
-| Grok Bot → Claude Code、Muse → Claude Code | 確認済み |
+| Dots ↔ Claude Code | 往復とも確認済み |
+| Grok Bot ↔ Claude Code | 往復とも確認済み（Claude Codeは自動起動） |
+| Muse → Claude Code | 確認済み |
 | relay → Muse | 確認済み（Museが手動で `take_inbox`） |
 | Dots ↔ Muse | 往復とも確認済み（Museの受信は最長で数十分遅れることがある） |
 | Grok Bot ↔ Muse | 未確認 |
 | ChatGPT（通常チャット） | 未接続 |
 
-確認できていないこと：Museのフックが止まる頻度と長さ、購読の更新（7日後）、連続送信時の挙動、Dotsの送信時承認を設定で省けるかどうか。Claude Codeは自動起動ではなく、セッション内で `/inbox` を取得しています。
+確認できていないこと：Museのフックが止まる頻度と長さ、購読の更新（7日後）、連続送信時の挙動、Dotsの送信時承認を設定で省けるかどうか。Claude Codeの自動起動は、Dots・Museからの連絡ではまだ試していません（経路はGrok Botと同じ）。
 
 ## 再現方法
 
